@@ -1,0 +1,14 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 22" width="32" height="22">
+<defs><mask id="lntm"><rect width="32" height="22" fill="#fff"/><circle cx="18" cy="11" r="6.6000000000000005" fill="#000"/></mask>
+<clipPath id="lntc"><circle cx="18" cy="11" r="6.6000000000000005"/></clipPath>
+<linearGradient id="lntr" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#fff"/><stop offset=".55" stop-color="#fff" stop-opacity=".35"/><stop offset="1" stop-color="#fff" stop-opacity=".8"/></linearGradient><mask id="lntb-shape"><path d="M11.1,10.1 Q18,9.1 24.9,10.1 L24.9,11.9 Q18,12.9 11.1,11.9Z" fill="#fff"/></mask><filter id="lntb" x="-60%" y="-60%" width="220%" height="220%" color-interpolation-filters="sRGB"><feGaussianBlur stdDeviation="1"/></filter></defs>
+<g class="base"><rect x="1.5" y="10" width="29" height="2" rx="1" fill="#fff" fill-opacity=".35" mask="url(#lntm)"/>
+<rect x="1.5" y="10" width="16.5" height="2" rx="1" fill="#fff" mask="url(#lntm)"/>
+<g clip-path="url(#lntc)">
+<path d="M11.1,10.1 Q18,9.1 24.9,10.1 L24.9,11.9 Q18,12.9 11.1,11.9Z" fill="#fff" fill-opacity=".35"/>
+<g mask="url(#lntb-shape)"><rect x="11.399999999999999" y="0" width="5.200000000000001" height="22" fill="#fff"/><circle cx="16.6" cy="11" r="1.4" fill="#fff"/></g>
+</g>
+<circle cx="18" cy="11" r="7.2" fill="#fff" fill-opacity=".06" stroke="url(#lntr)" stroke-width="1.2"/></g>
+<g class="sweep" opacity="0"><circle cx="18" cy="11" r="7.2" fill="none" stroke="#fff" stroke-width="1.6" stroke-linecap="round" pathLength="100" stroke-dasharray="14 86" transform="rotate(-150 18 11)" filter="url(#lntb)"/></g>
+<g class="star"><path d="M13.6,3.9 C13.78,5.99 14.41,6.62 16.5,6.8 C14.41,6.98 13.78,7.61 13.6,9.7 C13.42,7.61 12.79,6.98 10.7,6.8 C12.79,6.62 13.42,5.99 13.6,3.9Z" fill="#fff"/></g>
+</svg>

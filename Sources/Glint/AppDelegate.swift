@@ -88,7 +88,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     // MARK: - Menu bar
 
     private func setUpStatusItem() {
-        let item = NSStatusBar.system.statusItem(withLength: NSStatusItem.squareLength)
+        let item = NSStatusBar.system.statusItem(withLength: NSStatusItem.variableLength)
         let menu = NSMenu()
         menu.delegate = self
         item.menu = menu
@@ -97,11 +97,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     }
 
     private func updateStatusIcon() {
-        let symbol =
-            bar.state == .glint ? "sparkles.rectangle.stack.fill" : "sparkles.rectangle.stack"
-        statusItem?.button?.image =
-            NSImage(systemSymbolName: symbol, accessibilityDescription: "Glint")
-            ?? NSImage(systemSymbolName: "sparkles", accessibilityDescription: "Glint")
+        statusItem?.button?.image = LensGlyph.menuBarImage(glintShowing: bar.state == .glint)
     }
 
     func menuNeedsUpdate(_ menu: NSMenu) {

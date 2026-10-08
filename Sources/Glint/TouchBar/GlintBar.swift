@@ -15,6 +15,7 @@ final class GlintBar: NSObject, NSTouchBarDelegate {
     private let touchBar = NSTouchBar()
     private let barView = BarView()
     private let trayItem = NSCustomTouchBarItem(identifier: GlintBar.trayItemID)
+    private let trayGlyph = TrayGlyphView()
 
     private var pollTimer: Timer?
     /// One view per item kind in use (spacers have none), created on demand.
@@ -41,14 +42,9 @@ final class GlintBar: NSObject, NSTouchBarDelegate {
         touchBar.delegate = self
         touchBar.defaultItemIdentifiers = [Self.barItemID]
 
-        // A plain button: the Control Strip draws its own slot background around it.
-        let trayButton = NSButton(
-            image: NSImage(systemSymbolName: "sparkles", accessibilityDescription: "Glint")!,
-            target: self,
-            action: #selector(trayTapped)
-        )
-        trayButton.isBordered = false
-        trayItem.view = trayButton
+        // No background of its own: the Control Strip draws its slot around it.
+        trayGlyph.onTap = { [weak self] in self?.showGlint() }
+        trayItem.view = trayGlyph
 
         wirePanel()
         AudioController.shared.onChange = { [weak self] in self?.refresh() }
@@ -89,7 +85,7 @@ final class GlintBar: NSObject, NSTouchBarDelegate {
         onStateChange?()
     }
 
-    /// Steps aside so the frontmost app's own Touch Bar shows; the sparkles
+    /// Steps aside so the frontmost app's own Touch Bar shows; the lens
     /// button in the Control Strip brings Glint back.
     func showAppControls() {
         closePanel(animated: false)
@@ -98,16 +94,18 @@ final class GlintBar: NSObject, NSTouchBarDelegate {
         // The Control Strip forgets the tray item after a full-width bar; put it back.
         TouchBarPrivate.addTrayItem(trayItem)
         onStateChange?()
+        // Glint once the button has settled into the Control Strip, so the way back is easy to spot.
+        Task { [weak self] in
+            try? await Task.sleep(for: .milliseconds(450))
+            guard let self, self.state == .appControls else { return }
+            self.trayGlyph.playGlint()
+        }
     }
 
     /// Re-presents the bar after events that can knock it off (wake, Space switch, …).
     func reassert() {
         guard state == .glint else { return }
         TouchBarPrivate.present(touchBar, placement: .fullWidth, trayItem: Self.trayItemID)
-    }
-
-    @objc private func trayTapped() {
-        showGlint()
     }
 
     func frontmostAppChanged(_ app: NSRunningApplication?) {

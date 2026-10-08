@@ -13,6 +13,7 @@ cp "$BIN_DIR/Glint" "$APP/Contents/MacOS/Glint"
 # Loaded by /usr/bin/perl at runtime for now-playing state (see NowPlayingMonitor.swift).
 cp "$BIN_DIR/libGlintNowPlaying.dylib" "$APP/Contents/Frameworks/"
 cp Resources/Info.plist "$APP/Contents/Info.plist"
+cp Resources/AppIcon.icns "$APP/Contents/Resources/"
 codesign --force --sign - "$APP/Contents/Frameworks/libGlintNowPlaying.dylib"
 codesign --force --sign - "$APP"
 echo "Built $APP"
