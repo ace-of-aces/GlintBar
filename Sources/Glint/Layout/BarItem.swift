@@ -16,6 +16,7 @@ enum BarItemKind: String, CaseIterable, Codable, Sendable {
     case missionControl
     case apps
     case lockScreen
+    case siri
     case clock
     case space
     case flexibleSpace
@@ -35,6 +36,7 @@ enum BarItemKind: String, CaseIterable, Codable, Sendable {
         case .missionControl: "Mission Control"
         case .apps: "Apps"
         case .lockScreen: "Lock Screen"
+        case .siri: "Siri"
         case .clock: "Clock"
         case .space: "Space"
         case .flexibleSpace: "Flexible Space"
@@ -55,6 +57,7 @@ enum BarItemKind: String, CaseIterable, Codable, Sendable {
         case .missionControl: "rectangle.3.group.fill"
         case .apps: "square.grid.3x3.fill"
         case .lockScreen: "lock.fill"
+        case .siri: "siri"
         case .appControls, .nowPlaying, .clock, .space, .flexibleSpace: nil
         }
     }

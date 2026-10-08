@@ -244,6 +244,7 @@ final class GlintBar: NSObject, NSTouchBarDelegate {
             case .missionControl: SystemActions.missionControl()
             case .apps: SystemActions.apps()
             case .lockScreen: SystemActions.lockScreen()
+            case .siri: SystemActions.siri()
             default: break
             }
         }

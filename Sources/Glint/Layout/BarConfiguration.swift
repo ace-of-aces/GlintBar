@@ -11,7 +11,7 @@ final class BarConfiguration {
     static let defaultKinds: [BarItemKind] = [
         .appControls, .space, .previousTrack, .playPause, .nextTrack,
         .flexibleSpace,
-        .keyboardBrightness, .displayBrightness, .volume, .mute, .space, .screenshot,
+        .keyboardBrightness, .displayBrightness, .volume, .mute, .space, .screenshot, .siri,
     ]
 
     private(set) var items: [BarItem]

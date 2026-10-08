@@ -111,6 +111,10 @@ enum SystemActions {
         open("/System/Applications/Apps.app")
     }
 
+    static func siri() {
+        open("/System/Applications/Siri.app")
+    }
+
     static func lockScreen() {
         GLLockScreen()
     }

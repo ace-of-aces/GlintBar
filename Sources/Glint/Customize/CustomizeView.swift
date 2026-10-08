@@ -393,7 +393,7 @@ private struct PaletteSection {
 
     static let media = PaletteSection(title: "Media", kinds: [.previousTrack, .playPause, .nextTrack, .nowPlaying])
     static let soundAndLight = PaletteSection(title: "Sound & Light", kinds: [.keyboardBrightness, .displayBrightness, .volume, .mute])
-    static let system = PaletteSection(title: "System", kinds: [.appControls, .missionControl, .apps, .screenshot, .lockScreen, .clock])
+    static let system = PaletteSection(title: "System", kinds: [.appControls, .siri, .missionControl, .apps, .screenshot, .lockScreen, .clock])
     static let spacing = PaletteSection(title: "Spacing", kinds: [.space, .flexibleSpace])
 }
 
