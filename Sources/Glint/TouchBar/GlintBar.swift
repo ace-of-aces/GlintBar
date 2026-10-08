@@ -194,7 +194,12 @@ final class GlintBar: NSObject, NSTouchBarDelegate {
         panel.slider.onTouchBegan = { [weak self] in self?.closeDeadline = nil }
         panel.slider.onTouchEnded = { [weak self] in
             guard let self, self.activeLevel != nil else { return }
-            self.closeDeadline = Date() + Settings.autoCloseDelay
+            let delay = Settings.autoCloseDelay
+            guard delay > 0 else {
+                self.closePanel()
+                return
+            }
+            self.closeDeadline = Date() + delay
             self.barView.panel.showCloseButton()
         }
     }

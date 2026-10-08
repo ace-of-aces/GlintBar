@@ -104,7 +104,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         let autoClose = NSMenuItem(title: "Hide Sliders After", action: nil, keyEquivalent: "")
         let choices = NSMenu()
         for delay in Settings.autoCloseChoices {
-            let title = "\(delay.formatted()) s"
+            let title = delay == 0 ? "No Delay" : "\(delay.formatted()) s"
             let choice = NSMenuItem(title: title, action: #selector(setAutoClose(_:)), keyEquivalent: "")
             choice.target = self
             choice.representedObject = delay

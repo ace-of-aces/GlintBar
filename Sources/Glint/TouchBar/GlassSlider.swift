@@ -29,6 +29,15 @@ final class GlassSlider: NSView {
     private let solidKnob = NSView()
     private let glassKnob = NSGlassEffectView()
 
+    /// The blue of Apple's own sliders, in its dark-appearance variant (the Touch Bar is always dark).
+    private static let fillColor: CGColor = {
+        var color = NSColor.systemBlue.cgColor
+        NSAppearance(named: .darkAqua)?.performAsCurrentDrawingAppearance {
+            color = NSColor.systemBlue.cgColor
+        }
+        return color
+    }()
+
     private static let trackHeight: CGFloat = 6
     private static let restKnob = NSSize(width: 28, height: 20)
     private static let heldKnob = NSSize(width: 44, height: 28)
@@ -41,7 +50,7 @@ final class GlassSlider: NSView {
 
         track.backgroundColor = NSColor.white.withAlphaComponent(0.18).cgColor
         track.cornerRadius = Self.trackHeight / 2
-        fill.backgroundColor = NSColor.white.cgColor
+        fill.backgroundColor = Self.fillColor
         fill.cornerRadius = Self.trackHeight / 2
         layer?.addSublayer(track)
         layer?.addSublayer(fill)
