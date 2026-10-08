@@ -11,10 +11,14 @@ the Touch Bar system-wide with its own controls, built on real `NSGlassEffectVie
 - **Full-width Glint bar** over every app: frontmost-app button, media controls
   (previous / play-pause / next), keyboard backlight, display brightness, volume,
   mute and screenshot.
-- **Press and slide** on the keyboard, brightness or volume buttons to adjust them in
-  place, with a level gauge in the glass and a readout in the middle of the bar.
-- **Tap** one of them for a full-width slider with a glass knob that swells while held.
-  It **closes itself** after 2.5 s of inactivity (configurable from the menu bar).
+- **Sliders that pop out of their button**, like the native Control Strip: touch the
+  keyboard, brightness or volume button and a fixed-size slider grows out of it
+  straight away, with the same touch dragging the knob (relative to where it is, so
+  the level never jumps). The knob is solid at rest and turns into a clear glass lens
+  while dragged.
+- When the finger lifts, an ✕ appears in the button's slot and the slider **closes
+  itself** 1.5 s later (configurable from the menu bar).
+- **Play/pause shows the real playback state** (see below).
 - **App controls**: tap the app icon on the left to hand the Touch Bar back to the
   frontmost app's own controls. The ✨ button in Apple's Control Strip brings Glint back.
 - Menu bar item for switching modes, the auto-close delay and launch at login.
@@ -38,7 +42,9 @@ to drive the bar without touching it and capture it with `screencapture -b`:
 osascript -l JavaScript -e 'ObjC.import("Foundation"); $.NSDistributedNotificationCenter.defaultCenter.postNotificationNameObjectUserInfoDeliverImmediately("center.julian.Glint.debug", "slider:volume", $(), true)'
 ```
 
-Commands: `slider:volume`, `slider:display`, `slider:keyboard`, `close`, `appControls`, `glint`.
+Commands simulate a finger on a level button (x positions in bar points):
+`down:volume` (or `down:volume:850`), `move:700`, `up`, `tap:display`; plus `close`,
+`appControls` and `glint`.
 
 ## How it works
 
@@ -51,20 +57,17 @@ instead of crashing:
 | System-wide bar, Control Strip button | `NSTouchBar presentSystemModalTouchBar:…`, `DFRElementSetControlStripPresenceForIdentifier` (DFRFoundation) |
 | Display brightness | `DisplayServicesGetBrightness` / `SetBrightness` (DisplayServices) |
 | Keyboard backlight | `KeyboardBrightnessClient` (CoreBrightness) |
-| Media | `MRMediaRemoteSendCommand` (MediaRemote) |
+| Media commands | `MRMediaRemoteSendCommand` (MediaRemote) |
+| Playback state | MediaRemote, queried from inside `/usr/bin/perl` ([`GlintNowPlaying`](Sources/GlintNowPlaying)) |
 | Volume / mute | CoreAudio (public) |
 
+Since macOS 15.4 MediaRemote tells third-party processes that nothing is playing.
+`NowPlayingMonitor` therefore loads the small `libGlintNowPlaying.dylib` into the
+Apple-signed `/usr/bin/perl`, which may still ask, and reads its state changes as JSON
+lines. The helper exits when Glint's end of its stdin pipe closes.
+
 The whole bar is a single Touch Bar item ([`BarView`](Sources/Glint/TouchBar/BarView.swift)),
-so Glint controls layout and the transitions between the main row and the slider row.
+so Glint controls layout and the transitions between the main row and the level panel.
 
 Because of the private APIs Glint can't ship on the Mac App Store, and a macOS update
 can break it.
-
-## Findings on macOS 27
-
-- `NSGlassEffectView` renders properly on the Touch Bar.
-- A Control Strip tray item is squeezed into one slot and replaces one of Apple's items.
-- An `NSGlassEffectView` *inside* the Control Strip blacks out the whole Touch Bar, so
-  the tray button is a plain `NSButton`.
-- After a full-width system modal bar is minimized, the Control Strip drops the tray
-  item until it is added again.

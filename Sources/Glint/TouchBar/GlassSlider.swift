@@ -1,44 +1,62 @@
 import AppKit
 
-/// A Touch Bar slider with a Liquid Glass knob that swells while it is held,
-/// letting the filled track shine through it.
+/// A Touch Bar slider in the style of Liquid Glass sliders: a solid knob at rest
+/// that turns into a larger, clear glass lens while it is dragged.
+///
+/// The track runs between `trackInset` from either edge; touches anywhere in the
+/// view drive it. Touches can also be forwarded (`beginTracking` etc.) from the
+/// view the finger first landed on, as level buttons do.
 @MainActor
 final class GlassSlider: NSView {
     var onChange: ((Float) -> Void)?
     var onTouchBegan: (() -> Void)?
     var onTouchEnded: (() -> Void)?
 
-    var value: Float = 0 {
-        didSet {
-            value = min(max(value, 0), 1)
-            if !isTracking { needsLayout = true }
-        }
-    }
+    private(set) var value: Float = 0
+    private(set) var isTracking = false
+    /// When the current touch last reported anything; lets the owner detect a lost touch.
+    private(set) var lastTouchActivity = Date.distantPast
+
+    var trackInset: CGFloat = 0 { didSet { needsLayout = true } }
+
+    /// Finger-to-knob offset kept while dragging, so the knob never jumps under the finger.
+    private var grabOffset: CGFloat = 0
+    private var liquidTask: Task<Void, Never>?
+    private var isMorphing = false
 
     private let track = CALayer()
     private let fill = CALayer()
-    private let knob = NSGlassEffectView()
-    private(set) var isTracking = false
+    private let solidKnob = NSView()
+    private let glassKnob = NSGlassEffectView()
 
     private static let trackHeight: CGFloat = 6
-    private static let knobSize = NSSize(width: 38, height: 22)
-    private static let knobHeldSize = NSSize(width: 54, height: 28)
+    private static let restKnob = NSSize(width: 28, height: 20)
+    private static let heldKnob = NSSize(width: 44, height: 28)
+    private static let grabRadius: CGFloat = 30
 
     override init(frame: NSRect) {
         super.init(frame: frame)
         allowedTouchTypes = .direct
         wantsLayer = true
 
-        track.backgroundColor = NSColor.white.withAlphaComponent(0.16).cgColor
+        track.backgroundColor = NSColor.white.withAlphaComponent(0.18).cgColor
         track.cornerRadius = Self.trackHeight / 2
         fill.backgroundColor = NSColor.white.cgColor
         fill.cornerRadius = Self.trackHeight / 2
         layer?.addSublayer(track)
         layer?.addSublayer(fill)
 
-        knob.style = .clear
-        knob.cornerRadius = Self.knobSize.height / 2
-        addSubview(knob)
+        solidKnob.wantsLayer = true
+        solidKnob.layer?.backgroundColor = NSColor.white.cgColor
+        solidKnob.layer?.shadowColor = NSColor.black.cgColor
+        solidKnob.layer?.shadowOpacity = 0.35
+        solidKnob.layer?.shadowRadius = 3
+        solidKnob.layer?.shadowOffset = .zero
+        addSubview(solidKnob)
+
+        glassKnob.style = .clear
+        glassKnob.alphaValue = 0
+        addSubview(glassKnob)
     }
 
     @available(*, unavailable)
@@ -46,69 +64,126 @@ final class GlassSlider: NSView {
 
     override func layout() {
         super.layout()
-        layoutParts(animated: false)
+        layoutParts()
     }
 
-    private var knobTravel: (min: CGFloat, max: CGFloat) {
-        let inset = Self.knobHeldSize.width / 2
-        return (inset, bounds.width - inset)
+    // MARK: - Public API
+
+    /// Sets the value from outside (e.g. the volume changed elsewhere). Ignored mid-drag.
+    func setValue(_ newValue: Float) {
+        guard !isTracking else { return }
+        value = Self.clamp(newValue)
+        layoutParts()
     }
 
-    private func layoutParts(animated: Bool) {
-        let travel = knobTravel
-        let centerX = travel.min + (travel.max - travel.min) * CGFloat(value)
-        let size = isTracking ? Self.knobHeldSize : Self.knobSize
-
-        CATransaction.begin()
-        CATransaction.setDisableActions(!animated)
-        let trackY = (bounds.height - Self.trackHeight) / 2
-        track.frame = NSRect(x: travel.min, y: trackY, width: travel.max - travel.min, height: Self.trackHeight)
-        fill.frame = NSRect(x: travel.min, y: trackY, width: centerX - travel.min, height: Self.trackHeight)
-        CATransaction.commit()
-
-        let knobFrame = NSRect(x: centerX - size.width / 2, y: (bounds.height - size.height) / 2, width: size.width, height: size.height)
-        if animated {
-            NSAnimationContext.runAnimationGroup { context in
-                context.duration = 0.18
-                context.timingFunction = CAMediaTimingFunction(name: .easeOut)
-                knob.animator().frame = knobFrame
-            }
+    /// Starts a drag. `relative` keeps the knob where it is and moves it 1:1 with the
+    /// finger from here on (used when the touch began on a button); otherwise a touch
+    /// away from the knob jumps it there first. The knob turns liquid after `liquidDelay`.
+    func beginTracking(at x: CGFloat, relative: Bool, liquidDelay: Duration = .zero) {
+        if relative || abs(x - knobX) <= Self.grabRadius {
+            grabOffset = knobX - x
         } else {
-            knob.frame = knobFrame
+            grabOffset = 0
+            move(knobTo: x)
         }
-        knob.cornerRadius = size.height / 2
+        isTracking = true
+        lastTouchActivity = Date()
+        onTouchBegan?()
+
+        liquidTask?.cancel()
+        liquidTask = Task { [weak self] in
+            if liquidDelay > .zero { try? await Task.sleep(for: liquidDelay) }
+            guard let self, !Task.isCancelled, self.isTracking else { return }
+            self.setLiquid(true)
+        }
     }
 
-    // MARK: - Touches
+    func continueTracking(at x: CGFloat) {
+        guard isTracking else { return }
+        lastTouchActivity = Date()
+        move(knobTo: x + grabOffset)
+    }
+
+    func endTracking() {
+        guard isTracking else { return }
+        isTracking = false
+        liquidTask?.cancel()
+        setLiquid(false)
+        onTouchEnded?()
+    }
+
+    // MARK: - Touches landing on the slider itself
 
     override func touchesBegan(with event: NSEvent) {
         guard let touch = event.touches(matching: .began, in: self).first else { return }
-        isTracking = true
-        onTouchBegan?()
-        followTouch(to: touch.location(in: self).x)
-        layoutParts(animated: true)
+        beginTracking(at: touch.location(in: self).x, relative: false)
     }
 
     override func touchesMoved(with event: NSEvent) {
         guard let touch = event.touches(matching: .moved, in: self).first else { return }
-        followTouch(to: touch.location(in: self).x)
-        layoutParts(animated: false)
+        continueTracking(at: touch.location(in: self).x)
     }
 
     override func touchesEnded(with event: NSEvent) { endTracking() }
     override func touchesCancelled(with event: NSEvent) { endTracking() }
 
-    private func followTouch(to x: CGFloat) {
-        let travel = knobTravel
-        let newValue = Float((x - travel.min) / max(travel.max - travel.min, 1))
+    // MARK: - Geometry
+
+    private var trackStart: CGFloat { trackInset }
+    private var trackLength: CGFloat { max(bounds.width - 2 * trackInset, 1) }
+    private var knobX: CGFloat { trackStart + CGFloat(value) * trackLength }
+
+    private func move(knobTo x: CGFloat) {
+        let newValue = Self.clamp(Float((x - trackStart) / trackLength))
+        let changed = newValue != value
         value = newValue
-        onChange?(value)
+        layoutParts()
+        if changed { onChange?(value) }
     }
 
-    private func endTracking() {
-        guard isTracking else { return }
-        isTracking = false
-        layoutParts(animated: true)
-        onTouchEnded?()
+    private func layoutParts() {
+        let trackY = (bounds.height - Self.trackHeight) / 2
+
+        CATransaction.begin()
+        CATransaction.setDisableActions(true)
+        track.frame = NSRect(x: trackStart, y: trackY, width: trackLength, height: Self.trackHeight)
+        fill.frame = NSRect(x: trackStart, y: trackY, width: knobX - trackStart, height: Self.trackHeight)
+        CATransaction.commit()
+
+        solidKnob.frame = knobFrame(Self.restKnob)
+        solidKnob.layer?.cornerRadius = Self.restKnob.height / 2
+        if isMorphing {
+            // Keep the size animation running, just follow the finger.
+            glassKnob.setFrameOrigin(NSPoint(x: knobX - glassKnob.frame.width / 2, y: glassKnob.frame.minY))
+        } else {
+            let size = glassKnob.alphaValue > 0 ? Self.heldKnob : Self.restKnob
+            glassKnob.frame = knobFrame(size)
+            glassKnob.cornerRadius = size.height / 2
+        }
     }
+
+    private func knobFrame(_ size: NSSize) -> NSRect {
+        NSRect(x: knobX - size.width / 2, y: (bounds.height - size.height) / 2, width: size.width, height: size.height)
+    }
+
+    /// Solid at rest, a swollen clear-glass lens while held.
+    private func setLiquid(_ liquid: Bool) {
+        let size = liquid ? Self.heldKnob : Self.restKnob
+        isMorphing = true
+        glassKnob.cornerRadius = size.height / 2
+        NSAnimationContext.runAnimationGroup { context in
+            context.duration = liquid ? 0.14 : 0.28
+            context.timingFunction = CAMediaTimingFunction(name: liquid ? .easeOut : .easeInEaseOut)
+            glassKnob.animator().frame = knobFrame(size)
+            glassKnob.animator().alphaValue = liquid ? 1 : 0
+            solidKnob.animator().alphaValue = liquid ? 0 : 1
+        } completionHandler: {
+            MainActor.assumeIsolated {
+                self.isMorphing = false
+                self.layoutParts()
+            }
+        }
+    }
+
+    private static func clamp(_ value: Float) -> Float { min(max(value, 0), 1) }
 }

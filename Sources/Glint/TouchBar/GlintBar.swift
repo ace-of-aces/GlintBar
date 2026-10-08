@@ -16,13 +16,16 @@ final class GlintBar: NSObject, NSTouchBarDelegate {
     private let barView = BarView()
     private let trayItem = NSCustomTouchBarItem(identifier: GlintBar.trayItemID)
 
-    private var activeLevel: Level?
-    private var collapseTask: Task<Void, Never>?
-    private var readoutTask: Task<Void, Never>?
     private var pollTimer: Timer?
 
-    /// Points of horizontal travel for a full 0→1 sweep when scrubbing a button.
-    private static let scrubDistance: CGFloat = 240
+    // Level panel state.
+    private var activeLevel: Level?
+    /// When the open panel closes itself; nil while a finger is on it.
+    private var closeDeadline: Date?
+    private var panelTimer: Timer?
+    /// A drag that hasn't reported anything for this long is treated as lost
+    /// (its touch-up never arrived), so the panel can't get stuck open.
+    private static let lostTouchTimeout: TimeInterval = 10
 
     override init() {
         super.init()
@@ -39,8 +42,9 @@ final class GlintBar: NSObject, NSTouchBarDelegate {
         trayItem.view = trayButton
 
         wireMainRow()
-        wireSliderRow()
+        wirePanel()
         AudioController.shared.onChange = { [weak self] in self?.refresh() }
+        NowPlayingMonitor.shared.onChange = { [weak self] in self?.refresh() }
         updateAppButton(NSWorkspace.shared.frontmostApplication)
     }
 
@@ -48,15 +52,17 @@ final class GlintBar: NSObject, NSTouchBarDelegate {
 
     func start() {
         TouchBarPrivate.addTrayItem(trayItem)
+        NowPlayingMonitor.shared.start()
         showGlint()
         pollTimer = Timer.scheduledTimer(withTimeInterval: 1.5, repeats: true) { [weak self] _ in
-            // Brightness and playback state have no change notifications we can use.
+            // Brightness has no change notification we can use.
             MainActor.assumeIsolated { self?.refresh() }
         }
     }
 
     func stop() {
         pollTimer?.invalidate()
+        NowPlayingMonitor.shared.stop()
         TouchBarPrivate.dismiss(touchBar)
         TouchBarPrivate.removeTrayItem(trayItem)
     }
@@ -71,7 +77,7 @@ final class GlintBar: NSObject, NSTouchBarDelegate {
     /// Steps aside so the frontmost app's own Touch Bar shows; the sparkles
     /// button in the Control Strip brings Glint back.
     func showAppControls() {
-        closeSlider(animated: false)
+        closePanel(animated: false)
         state = .appControls
         TouchBarPrivate.minimize(touchBar)
         // The Control Strip forgets the tray item after a full-width bar; put it back.
@@ -101,12 +107,37 @@ final class GlintBar: NSObject, NSTouchBarDelegate {
     }
 
     #if DEBUG
+    private var debugButton: GlassButton?
+
+    /// Simulates a finger on a level button with bar x positions — `down:volume`
+    /// (or `down:volume:850`), `move:700`, `up`, `tap:display` — plus `close`,
+    /// `appControls` and `glint`.
     func debug(_ command: String) {
-        switch command {
-        case "slider:volume": openSlider(.volume)
-        case "slider:display": openSlider(.display)
-        case "slider:keyboard": openSlider(.keyboard)
-        case "close": closeSlider()
+        let parts = command.split(separator: ":").map(String.init)
+        let row = barView.main
+        func button(for name: String) -> GlassButton {
+            switch name {
+            case "keyboard": row.keyboardButton
+            case "display": row.displayButton
+            default: row.volumeButton
+            }
+        }
+        func local(_ barX: String?, in button: GlassButton) -> CGFloat {
+            guard let barX, let x = Double(barX) else { return button.bounds.midX }
+            return button.convert(NSPoint(x: x, y: 0), from: barView).x
+        }
+        switch parts.first {
+        case "down", "tap":
+            let target = button(for: parts.count > 1 ? parts[1] : "volume")
+            debugButton = target
+            target.onTouchDown?(local(parts.count > 2 ? parts[2] : nil, in: target))
+            if parts.first == "tap" { target.onTouchUp?() }
+        case "move":
+            guard let target = debugButton else { return }
+            target.onTouchMoved?(local(parts.count > 1 ? parts[1] : nil, in: target))
+        case "up":
+            debugButton?.onTouchUp?()
+        case "close": closePanel()
         case "appControls": showAppControls()
         case "glint": showGlint()
         default: NSLog("Glint: unknown debug command \(command)")
@@ -120,12 +151,9 @@ final class GlintBar: NSObject, NSTouchBarDelegate {
         let row = barView.main
         row.appButton.onTap = { [weak self] in self?.showAppControls() }
         row.previousButton.onTap = { Media.send(.previousTrack) }
-        row.playPauseButton.onTap = { [weak self] in
+        row.playPauseButton.onTap = {
             Media.send(.togglePlayPause)
-            Task { @MainActor in
-                try? await Task.sleep(for: .milliseconds(300))
-                self?.refresh()
-            }
+            NowPlayingMonitor.shared.assumeToggled()
         }
         row.nextButton.onTap = { Media.send(.nextTrack) }
         row.muteButton.onTap = { [weak self] in
@@ -134,78 +162,87 @@ final class GlintBar: NSObject, NSTouchBarDelegate {
         }
         row.screenshotButton.onTap = { SystemActions.screenshot() }
 
+        // Like the native Control Strip: touching a level button pops its slider out
+        // of it straight away, and the same touch keeps dragging the knob (relative to
+        // where it is, so nothing jumps).
         for (button, level) in [(row.keyboardButton, Level.keyboard), (row.displayButton, .display), (row.volumeButton, .volume)] {
-            button.onTap = { [weak self] in self?.openSlider(level) }
-            button.onScrubBegan = { [weak self, weak button] in
-                self?.readoutTask?.cancel()
-                button?.setGauge(level.value)
-                self?.showReadout(for: level)
+            button.onTouchDown = { [weak self, weak button] x in
+                guard let self, let button else { return }
+                self.openPanel(level, from: button)
+                self.barView.panel.slider.beginTracking(
+                    at: self.sliderX(x, from: button),
+                    relative: true,
+                    liquidDelay: .milliseconds(Int(LevelPanelView.popDuration * 1000))
+                )
             }
-            button.onScrub = { [weak self, weak button] delta in
-                level.set(level.value + Float(delta / Self.scrubDistance))
-                button?.setGauge(level.value)
-                self?.showReadout(for: level)
-                self?.refresh()
+            button.onTouchMoved = { [weak self, weak button] x in
+                guard let self, let button else { return }
+                self.barView.panel.slider.continueTracking(at: self.sliderX(x, from: button))
             }
-            button.onScrubEnded = { [weak self] in self?.hideReadoutSoon() }
+            button.onTouchUp = { [weak self] in self?.barView.panel.slider.endTracking() }
         }
     }
 
-    private func wireSliderRow() {
-        let row = barView.slider
-        row.closeButton.onTap = { [weak self] in self?.closeSlider() }
-        row.iconButton.onTap = { [weak self] in
-            guard self?.activeLevel == .volume else { return }
-            AudioController.shared.isMuted.toggle()
-            self?.refresh()
-            self?.scheduleCollapse()
-        }
-        row.slider.onChange = { [weak self] value in
+    private func wirePanel() {
+        let panel = barView.panel
+        panel.closeButton.onTap = { [weak self] in self?.closePanel() }
+        panel.onOutsideTouch = { [weak self] in self?.closePanel() }
+        panel.slider.onChange = { [weak self] value in
             self?.activeLevel?.set(value)
             self?.refresh()
         }
-        row.slider.onTouchBegan = { [weak self] in self?.collapseTask?.cancel() }
-        row.slider.onTouchEnded = { [weak self] in self?.scheduleCollapse() }
+        panel.slider.onTouchBegan = { [weak self] in self?.closeDeadline = nil }
+        panel.slider.onTouchEnded = { [weak self] in
+            guard let self, self.activeLevel != nil else { return }
+            self.closeDeadline = Date() + Settings.autoCloseDelay
+            self.barView.panel.showCloseButton()
+        }
     }
 
-    // MARK: - Sliders
+    /// Converts an x position in `view` to the slider's coordinate space.
+    private func sliderX(_ x: CGFloat, from view: NSView) -> CGFloat {
+        barView.panel.slider.convert(NSPoint(x: x, y: 0), from: view).x
+    }
 
-    private func openSlider(_ level: Level) {
+    // MARK: - Level panel
+
+    private func openPanel(_ level: Level, from button: GlassButton) {
         activeLevel = level
-        barView.slider.slider.value = level.value
+        closeDeadline = nil
+        barView.openPanel(level, from: button)
         refresh()
-        barView.showSlider(true)
-        scheduleCollapse()
+
+        // Closing is driven by a deadline checked several times a second rather than a
+        // one-shot timer, so a missed or reordered touch event can't leave it open.
+        panelTimer?.invalidate()
+        panelTimer = Timer.scheduledTimer(withTimeInterval: 0.1, repeats: true) { [weak self] _ in
+            MainActor.assumeIsolated { self?.panelTick() }
+        }
     }
 
-    private func closeSlider(animated: Bool = true) {
-        collapseTask?.cancel()
+    private func panelTick() {
+        let slider = barView.panel.slider
+        if slider.isTracking {
+            if Date().timeIntervalSince(slider.lastTouchActivity) > Self.lostTouchTimeout {
+                slider.endTracking() // sets the deadline via onTouchEnded
+            } else {
+                closeDeadline = nil
+            }
+            return
+        }
+        let deadline = closeDeadline ?? Date() + Settings.autoCloseDelay
+        closeDeadline = deadline
+        if Date() >= deadline { closePanel() }
+    }
+
+    private func closePanel(animated: Bool = true) {
+        guard activeLevel != nil else { return }
         activeLevel = nil
-        barView.showSlider(false, animated: animated)
-    }
-
-    private func scheduleCollapse() {
-        collapseTask?.cancel()
-        let delay = Settings.autoCloseDelay
-        guard delay > 0 else { return }
-        collapseTask = Task { [weak self] in
-            try? await Task.sleep(for: .seconds(delay))
-            guard !Task.isCancelled else { return }
-            self?.closeSlider()
-        }
-    }
-
-    private func showReadout(for level: Level) {
-        barView.main.showReadout("\(level.title)  \(Int((level.value * 100).rounded()))%")
-    }
-
-    private func hideReadoutSoon() {
-        readoutTask?.cancel()
-        readoutTask = Task { [weak self] in
-            try? await Task.sleep(for: .seconds(0.8))
-            guard !Task.isCancelled else { return }
-            self?.barView.main.showReadout(nil)
-        }
+        panelTimer?.invalidate()
+        panelTimer = nil
+        closeDeadline = nil
+        barView.panel.slider.endTracking()
+        barView.closePanel(animated: animated)
     }
 
     // MARK: - State → UI
@@ -219,21 +256,15 @@ final class GlintBar: NSObject, NSTouchBarDelegate {
         row.volumeButton.setSymbol(Level.volume.symbol)
         row.muteButton.isActive = AudioController.shared.isMuted
 
-        Media.isPlaying { [weak self] playing in
-            let symbol = switch playing {
-            case true?: "pause.fill"
-            case false?: "play.fill"
-            case nil: "playpause.fill"
-            }
-            self?.barView.main.playPauseButton.setSymbol(symbol)
+        let playSymbol = switch NowPlayingMonitor.shared.isPlaying {
+        case true?: "pause.fill"
+        case false?: "play.fill"
+        case nil: "playpause.fill"
         }
+        row.playPauseButton.setSymbol(playSymbol)
 
         if let level = activeLevel {
-            let sliderRow = barView.slider
-            sliderRow.iconButton.setSymbol(level.symbol)
-            sliderRow.iconButton.isActive = level == .volume && AudioController.shared.isMuted
-            if !sliderRow.slider.isTracking { sliderRow.slider.value = level.value }
-            sliderRow.valueLabel.stringValue = "\(Int((level.value * 100).rounded()))%"
+            barView.panel.slider.setValue(level.value)
         }
     }
 

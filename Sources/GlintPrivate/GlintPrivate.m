@@ -151,12 +151,3 @@ BOOL GLMediaSendCommand(GLMediaCommand command) {
     Boolean (*fn)(int, CFDictionaryRef) = GLSymbol(kMediaRemote, "MRMediaRemoteSendCommand");
     return fn ? fn((int)command, NULL) : NO;
 }
-
-void GLMediaIsPlaying(void (^completion)(BOOL known, BOOL playing)) {
-    void (*fn)(dispatch_queue_t, void (^)(Boolean)) = GLSymbol(kMediaRemote, "MRMediaRemoteGetNowPlayingApplicationIsPlaying");
-    if (!fn) {
-        dispatch_async(dispatch_get_main_queue(), ^{ completion(NO, NO); });
-        return;
-    }
-    fn(dispatch_get_main_queue(), ^(Boolean playing) { completion(YES, playing); });
-}

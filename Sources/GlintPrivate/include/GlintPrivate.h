@@ -48,7 +48,6 @@ typedef NS_ENUM(NSInteger, GLMediaCommand) {
 } NS_SWIFT_NAME(MediaCommand);
 
 BOOL GLMediaSendCommand(GLMediaCommand command);
-/// Calls `completion` on the main queue. `known` is NO when the state couldn't be read.
-void GLMediaIsPlaying(void (^completion)(BOOL known, BOOL playing));
+// Playback *state* can't be read from here; see Sources/GlintNowPlaying.
 
 NS_ASSUME_NONNULL_END

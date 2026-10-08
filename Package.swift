@@ -4,6 +4,10 @@ import PackageDescription
 let package = Package(
     name: "Glint",
     platforms: [.macOS("26.0")],
+    products: [
+        .executable(name: "Glint", targets: ["Glint"]),
+        .library(name: "GlintNowPlaying", type: .dynamic, targets: ["GlintNowPlaying"]),
+    ],
     targets: [
         // Thin Objective-C shim around the private frameworks Glint needs
         // (DFRFoundation, DisplayServices, CoreBrightness, MediaRemote).
@@ -12,6 +16,12 @@ let package = Package(
         .target(
             name: "GlintPrivate",
             path: "Sources/GlintPrivate"
+        ),
+        // Loaded into /usr/bin/perl by NowPlayingMonitor, never linked into Glint:
+        // MediaRemote only reports playback state to Apple-signed processes.
+        .target(
+            name: "GlintNowPlaying",
+            path: "Sources/GlintNowPlaying"
         ),
         .executableTarget(
             name: "Glint",

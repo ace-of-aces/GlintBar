@@ -2,16 +2,15 @@ import AppKit
 
 /// A Liquid Glass capsule for the Touch Bar.
 ///
-/// Tapping calls `onTap`. When `onScrub` is set, pressing and sliding horizontally
-/// adjusts a value in place (like the native volume button) and shows a level gauge
-/// inside the glass while the finger is down.
+/// Tapping calls `onTap`. Setting `onTouchDown` instead turns the button into a handle:
+/// the whole touch (down, every move, up) is reported in this view's coordinates the
+/// moment the finger lands, which is how level buttons open a slider under the finger.
 @MainActor
 final class GlassButton: NSView {
     var onTap: (() -> Void)?
-    var onScrubBegan: (() -> Void)?
-    /// Horizontal movement since the last call, in points.
-    var onScrub: ((CGFloat) -> Void)?
-    var onScrubEnded: (() -> Void)?
+    var onTouchDown: ((CGFloat) -> Void)?
+    var onTouchMoved: ((CGFloat) -> Void)?
+    var onTouchUp: (() -> Void)?
 
     /// When true the glass is tinted to show an "on" state (e.g. muted).
     var isActive = false { didSet { updateTint() } }
@@ -19,14 +18,10 @@ final class GlassButton: NSView {
     private let glass = NSGlassEffectView()
     private let content = NSView()
     private let imageView = NSImageView()
-    private let gauge = CALayer()
     private let width: CGFloat
 
     private var touchStartX: CGFloat = 0
-    private var lastTouchX: CGFloat = 0
     private var isPressed = false
-    private var isScrubbing = false
-    private static let scrubThreshold: CGFloat = 6
 
     init(symbol: String, width: CGFloat = BarMetrics.buttonWidth) {
         self.width = width
@@ -37,11 +32,6 @@ final class GlassButton: NSView {
         glass.cornerRadius = BarMetrics.height / 2
         glass.frame = bounds
         glass.autoresizingMask = [.width, .height]
-
-        content.wantsLayer = true
-        gauge.backgroundColor = NSColor.white.withAlphaComponent(0.22).cgColor
-        gauge.opacity = 0
-        content.layer?.addSublayer(gauge)
 
         imageView.imageScaling = .scaleProportionallyDown
         imageView.contentTintColor = .white
@@ -73,60 +63,39 @@ final class GlassButton: NSView {
         imageView.image = image
     }
 
-    /// Fill level of the in-button gauge, 0...1. Only visible while scrubbing.
-    func setGauge(_ level: Float) {
-        CATransaction.begin()
-        CATransaction.setDisableActions(true)
-        gauge.frame = NSRect(x: 0, y: 0, width: bounds.width * CGFloat(min(max(level, 0), 1)), height: bounds.height)
-        CATransaction.commit()
-    }
-
     // MARK: - Touches
 
     override func touchesBegan(with event: NSEvent) {
         guard let touch = event.touches(matching: .began, in: self).first else { return }
         touchStartX = touch.location(in: self).x
-        lastTouchX = touchStartX
-        isScrubbing = false
-        setPressed(true)
+        if let onTouchDown {
+            onTouchDown(touchStartX)
+        } else {
+            setPressed(true)
+        }
     }
 
     override func touchesMoved(with event: NSEvent) {
-        guard let touch = event.touches(matching: .moved, in: self).first else { return }
-        let x = touch.location(in: self).x
-        if !isScrubbing, onScrub != nil, abs(x - touchStartX) > Self.scrubThreshold {
-            isScrubbing = true
-            lastTouchX = x
-            onScrubBegan?()
-            setGaugeVisible(true)
-        }
-        if isScrubbing {
-            onScrub?(x - lastTouchX)
-            lastTouchX = x
-        }
+        guard let onTouchMoved, let touch = event.touches(matching: .moved, in: self).first else { return }
+        onTouchMoved(touch.location(in: self).x)
     }
 
     override func touchesEnded(with event: NSEvent) {
-        let wasScrubbing = isScrubbing
-        let endX = event.touches(matching: .ended, in: self).first?.location(in: self).x ?? touchStartX
-        finishTouch()
-        if wasScrubbing {
-            onScrubEnded?()
-        } else if endX > -12, endX < bounds.width + 12 {
-            onTap?()
+        if let onTouchUp {
+            onTouchUp()
+            return
         }
+        setPressed(false)
+        let endX = event.touches(matching: .ended, in: self).first?.location(in: self).x ?? touchStartX
+        if endX > -12, endX < bounds.width + 12 { onTap?() }
     }
 
     override func touchesCancelled(with event: NSEvent) {
-        let wasScrubbing = isScrubbing
-        finishTouch()
-        if wasScrubbing { onScrubEnded?() }
-    }
-
-    private func finishTouch() {
-        isScrubbing = false
-        setPressed(false)
-        setGaugeVisible(false)
+        if let onTouchUp {
+            onTouchUp()
+        } else {
+            setPressed(false)
+        }
     }
 
     // MARK: - Appearance
@@ -149,10 +118,6 @@ final class GlassButton: NSView {
         animation.timingFunction = CAMediaTimingFunction(name: .easeOut)
         layer?.add(animation, forKey: "press")
         layer?.transform = transform
-    }
-
-    private func setGaugeVisible(_ visible: Bool) {
-        gauge.opacity = visible ? 1 : 0
     }
 
     private func updateTint() {

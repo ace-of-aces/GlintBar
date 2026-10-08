@@ -4,13 +4,16 @@ set -euo pipefail
 cd "$(dirname "$0")/.."
 
 swift build -c release
-BIN="$(swift build -c release --show-bin-path)/Glint"
+BIN_DIR="$(swift build -c release --show-bin-path)"
 APP=build/Glint.app
 
 rm -rf "$APP"
-mkdir -p "$APP/Contents/MacOS" "$APP/Contents/Resources"
-cp "$BIN" "$APP/Contents/MacOS/Glint"
+mkdir -p "$APP/Contents/MacOS" "$APP/Contents/Resources" "$APP/Contents/Frameworks"
+cp "$BIN_DIR/Glint" "$APP/Contents/MacOS/Glint"
+# Loaded by /usr/bin/perl at runtime for now-playing state (see NowPlayingMonitor.swift).
+cp "$BIN_DIR/libGlintNowPlaying.dylib" "$APP/Contents/Frameworks/"
 cp Resources/Info.plist "$APP/Contents/Info.plist"
+codesign --force --sign - "$APP/Contents/Frameworks/libGlintNowPlaying.dylib"
 codesign --force --sign - "$APP"
 echo "Built $APP"
 

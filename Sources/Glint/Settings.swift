@@ -4,13 +4,16 @@ import ServiceManagement
 enum Settings {
     private static let autoCloseKey = "autoCloseDelay"
 
-    /// Seconds of inactivity before an open slider closes itself; 0 keeps it open.
+    /// Seconds a slider stays up after the finger lifts.
     static var autoCloseDelay: Double {
-        get { UserDefaults.standard.object(forKey: autoCloseKey) as? Double ?? 2.5 }
+        get {
+            let stored = UserDefaults.standard.object(forKey: autoCloseKey) as? Double ?? 1.5
+            return stored > 0 ? stored : 1.5
+        }
         set { UserDefaults.standard.set(newValue, forKey: autoCloseKey) }
     }
 
-    static let autoCloseChoices: [Double] = [1.5, 2.5, 4, 0]
+    static let autoCloseChoices: [Double] = [1, 1.5, 2.5, 4]
 
     /// Login items only work from a real .app bundle, not `swift run`.
     static var canLaunchAtLogin: Bool {

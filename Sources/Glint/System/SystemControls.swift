@@ -49,11 +49,20 @@ enum Level: CaseIterable {
         }
     }
 
-    var title: String {
+    /// Icons at the low and high ends of the slider.
+    var lowSymbol: String {
         switch self {
-        case .keyboard: "Keyboard"
-        case .display: "Brightness"
-        case .volume: "Volume"
+        case .keyboard: "light.min"
+        case .display: "sun.min.fill"
+        case .volume: "speaker.fill"
+        }
+    }
+
+    var highSymbol: String {
+        switch self {
+        case .keyboard: "light.max"
+        case .display: "sun.max.fill"
+        case .volume: "speaker.wave.3.fill"
         }
     }
 }
@@ -85,12 +94,6 @@ enum DisplayBrightness {
 enum Media {
     static func send(_ command: MediaCommand) {
         GLMediaSendCommand(command)
-    }
-
-    static func isPlaying(_ completion: @escaping @MainActor (Bool?) -> Void) {
-        GLMediaIsPlaying { known, playing in
-            MainActor.assumeIsolated { completion(known ? playing : nil) }
-        }
     }
 }
 
