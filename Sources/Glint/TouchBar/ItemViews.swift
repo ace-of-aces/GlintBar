@@ -1,14 +1,30 @@
 import AppKit
 
-/// Track and artist in a glass capsule; tapping it toggles playback.
+/// Track and artist in a glass capsule with a thin progress line along the bottom.
+/// Tapping toggles playback; pressing and sliding, or pressing and holding, starts a
+/// scrub, reported (with every move) in this view's coordinates.
 @MainActor
 final class NowPlayingView: NSView {
     var onTap: (() -> Void)?
+    /// Whether a scrub may start (a track with a known length is playing).
+    var canScrub: () -> Bool = { false }
+    var onScrubBegan: ((CGFloat) -> Void)?
+    var onScrubMoved: ((CGFloat) -> Void)?
+    var onScrubEnded: (() -> Void)?
 
     private let glass = NSGlassEffectView()
     private let title = NSTextField(labelWithString: "")
     private let artist = NSTextField(labelWithString: "")
+    private let progressTrack = CALayer()
+    private let progressFill = CALayer()
     private let width: CGFloat
+
+    private var touchStartX: CGFloat = 0
+    private var isScrubbing = false
+    private var holdTask: Task<Void, Never>?
+    private static let slideThreshold: CGFloat = 8
+    private static let holdDelay: Duration = .milliseconds(350)
+    private static let progressInset: CGFloat = 15 // keeps the line on the capsule's straight edge
 
     init(width: CGFloat) {
         self.width = width
@@ -32,16 +48,26 @@ final class NowPlayingView: NSView {
             label.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
         }
         let content = NSView()
+        content.wantsLayer = true
         stack.translatesAutoresizingMaskIntoConstraints = false
         content.addSubview(stack)
         NSLayoutConstraint.activate([
             stack.leadingAnchor.constraint(equalTo: content.leadingAnchor, constant: 14),
             stack.trailingAnchor.constraint(lessThanOrEqualTo: content.trailingAnchor, constant: -14),
-            stack.centerYAnchor.constraint(equalTo: content.centerYAnchor),
+            // Nudged up to leave room for the progress line.
+            stack.centerYAnchor.constraint(equalTo: content.centerYAnchor, constant: -1.5),
         ])
+
+        progressTrack.backgroundColor = NSColor.white.withAlphaComponent(0.18).cgColor
+        progressFill.backgroundColor = GlassSlider.fillColor
+        for line in [progressTrack, progressFill] {
+            line.cornerRadius = 1
+            content.layer?.addSublayer(line)
+        }
+
         glass.contentView = content
         addSubview(glass)
-        update(title: nil, artist: nil)
+        update(title: nil, artist: nil, progress: nil)
     }
 
     @available(*, unavailable)
@@ -49,24 +75,68 @@ final class NowPlayingView: NSView {
 
     override var intrinsicContentSize: NSSize { NSSize(width: width, height: BarMetrics.height) }
 
-    func update(title: String?, artist: String?) {
+    func update(title: String?, artist: String?, progress: Float?) {
         self.title.stringValue = title ?? "Not Playing"
         self.title.textColor = title == nil ? NSColor.white.withAlphaComponent(0.5) : .white
         self.artist.stringValue = artist ?? ""
         self.artist.isHidden = artist?.isEmpty ?? true
+
+        let length = width - 2 * Self.progressInset
+        let fraction = CGFloat(min(max(progress ?? 0, 0), 1))
+        CATransaction.begin()
+        CATransaction.setDisableActions(true)
+        progressTrack.frame = NSRect(x: Self.progressInset, y: 2.5, width: length, height: 2)
+        progressFill.frame = NSRect(x: Self.progressInset, y: 2.5, width: length * fraction, height: 2)
+        progressTrack.isHidden = progress == nil
+        progressFill.isHidden = progress == nil
+        CATransaction.commit()
     }
 
+    // MARK: - Touches
+
     override func touchesBegan(with event: NSEvent) {
+        guard let touch = event.touches(matching: .began, in: self).first else { return }
+        touchStartX = touch.location(in: self).x
+        isScrubbing = false
         glass.tintColor = NSColor.white.withAlphaComponent(0.28)
+        holdTask = Task { [weak self] in
+            try? await Task.sleep(for: Self.holdDelay)
+            guard let self, !Task.isCancelled else { return }
+            self.beginScrub()
+        }
+    }
+
+    override func touchesMoved(with event: NSEvent) {
+        guard let touch = event.touches(matching: .moved, in: self).first else { return }
+        let x = touch.location(in: self).x
+        if !isScrubbing, abs(x - touchStartX) > Self.slideThreshold { beginScrub() }
+        if isScrubbing { onScrubMoved?(x) }
     }
 
     override func touchesEnded(with event: NSEvent) {
-        glass.tintColor = nil
-        onTap?()
+        let wasScrubbing = finishTouch()
+        if wasScrubbing { onScrubEnded?() } else { onTap?() }
     }
 
     override func touchesCancelled(with event: NSEvent) {
+        if finishTouch() { onScrubEnded?() }
+    }
+
+    private func beginScrub() {
+        holdTask?.cancel()
+        guard !isScrubbing, canScrub() else { return }
+        isScrubbing = true
         glass.tintColor = nil
+        // From where the finger landed, so the movement that started the scrub counts.
+        onScrubBegan?(touchStartX)
+    }
+
+    /// Returns whether the touch was a scrub.
+    private func finishTouch() -> Bool {
+        holdTask?.cancel()
+        glass.tintColor = nil
+        defer { isScrubbing = false }
+        return isScrubbing
     }
 }
 

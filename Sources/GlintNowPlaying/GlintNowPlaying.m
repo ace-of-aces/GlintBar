@@ -5,13 +5,16 @@
 // Since macOS 15.4 MediaRemote answers now-playing queries from third-party processes
 // with "nothing is playing". This library runs inside /usr/bin/perl, which is
 // Apple-signed and may still ask, and relays the answers to Glint over stdout.
+// Commands that need the same standing (seeking) come back over stdin.
 
 typedef void (*MRRegisterForNotificationsFn)(dispatch_queue_t);
 typedef void (*MRIsPlayingFn)(dispatch_queue_t, void (^)(Boolean));
 typedef void (*MRNowPlayingInfoFn)(dispatch_queue_t, void (^)(CFDictionaryRef));
+typedef void (*MRSetElapsedTimeFn)(double);
 
 static MRIsPlayingFn isPlayingFn;
 static MRNowPlayingInfoFn nowPlayingInfoFn;
+static MRSetElapsedTimeFn setElapsedTimeFn;
 static dispatch_queue_t queue;
 static NSData *lastLine;
 
@@ -29,6 +32,11 @@ static NSString *stringValue(NSDictionary *info, NSString *key) {
     return [value isKindOfClass:NSString.class] ? value : nil;
 }
 
+static NSNumber *numberValue(NSDictionary *info, NSString *key) {
+    id value = info[key];
+    return [value isKindOfClass:NSNumber.class] ? value : nil;
+}
+
 /// Reads the current state and writes it if it changed. Runs on `queue`.
 static void emitState(void) {
     isPlayingFn(queue, ^(Boolean playing) {
@@ -37,6 +45,14 @@ static void emitState(void) {
             NSMutableDictionary *payload = [@{ @"playing": playing ? @YES : @NO } mutableCopy];
             payload[@"title"] = stringValue(info, @"kMRMediaRemoteNowPlayingInfoTitle");
             payload[@"artist"] = stringValue(info, @"kMRMediaRemoteNowPlayingInfoArtist");
+            // Position: `elapsed` was true at `timestamp` and advances at `rate`.
+            payload[@"duration"] = numberValue(info, @"kMRMediaRemoteNowPlayingInfoDuration");
+            payload[@"elapsed"] = numberValue(info, @"kMRMediaRemoteNowPlayingInfoElapsedTime");
+            payload[@"rate"] = numberValue(info, @"kMRMediaRemoteNowPlayingInfoPlaybackRate");
+            id timestamp = info[@"kMRMediaRemoteNowPlayingInfoTimestamp"];
+            if ([timestamp isKindOfClass:NSDate.class]) {
+                payload[@"timestamp"] = @([(NSDate *)timestamp timeIntervalSince1970]);
+            }
             writeLine(payload);
         });
     });
@@ -53,6 +69,7 @@ void glint_now_playing_stream(void) {
         MRRegisterForNotificationsFn registerFn = mediaRemote ? dlsym(mediaRemote, "MRMediaRemoteRegisterForNowPlayingNotifications") : NULL;
         isPlayingFn = mediaRemote ? dlsym(mediaRemote, "MRMediaRemoteGetNowPlayingApplicationIsPlaying") : NULL;
         nowPlayingInfoFn = mediaRemote ? dlsym(mediaRemote, "MRMediaRemoteGetNowPlayingInfo") : NULL;
+        setElapsedTimeFn = mediaRemote ? dlsym(mediaRemote, "MRMediaRemoteSetElapsedTime") : NULL;
         if (!registerFn || !isPlayingFn || !nowPlayingInfoFn) {
             writeLine(@{ @"error": @"MediaRemote unavailable" });
             exit(1);
@@ -83,11 +100,21 @@ void glint_now_playing_stream(void) {
         dispatch_source_set_event_handler(poll, ^{ emitState(); });
         dispatch_resume(poll);
 
-        // Glint holds our stdin open; when it quits or crashes, the pipe closes and we follow.
-        // The read blocks, so it gets a thread of its own rather than `queue`.
+        // Glint sends commands as lines on stdin ("seek <seconds>") and holds it open;
+        // when it quits or crashes, the pipe closes and we follow. The read blocks, so it
+        // gets a thread of its own.
         [NSThread detachNewThreadWithBlock:^{
-            char buffer[64];
-            while (read(STDIN_FILENO, buffer, sizeof buffer) > 0) {}
+            char *line = NULL;
+            size_t capacity = 0;
+            while (getline(&line, &capacity, stdin) > 0) {
+                double seconds;
+                if (sscanf(line, "seek %lf", &seconds) == 1 && setElapsedTimeFn) {
+                    dispatch_async(queue, ^{
+                        setElapsedTimeFn(seconds);
+                        emitState();
+                    });
+                }
+            }
             exit(0);
         }];
     }

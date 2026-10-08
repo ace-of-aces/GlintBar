@@ -12,7 +12,7 @@ enum BarMetrics {
 @MainActor
 final class BarView: NSView {
     let main = MainRowView()
-    let panel = LevelPanelView()
+    let panel = SliderPanelView()
 
     init() {
         super.init(frame: NSRect(x: 0, y: 0, width: BarMetrics.width, height: BarMetrics.height))
@@ -33,16 +33,19 @@ final class BarView: NSView {
         panel.frame = bounds
     }
 
-    var isShowingPanel: Bool { !panel.isHidden && panel.level != nil }
+    var isShowingPanel: Bool { !panel.isHidden && panel.isPresented }
 
-    /// Pops the panel for `level` out of `button`; the rest of the row fades away.
+    /// Pops the slider panel out of `anchor`; the rest of the row fades away.
     /// The row stays in the view hierarchy (only transparent) so the touch that
-    /// began on `button` keeps being delivered to it.
-    func openPanel(_ level: Level, from button: NSView) {
+    /// began on `anchor` keeps being delivered to it.
+    func openPanel(
+        from anchor: NSView, placement: SliderPanelView.Placement,
+        leading: PanelAccessory, trailing: PanelAccessory, value: Float
+    ) {
         panel.isHidden = false
-        panel.present(level, from: convert(button.bounds, from: button))
+        panel.present(from: convert(anchor.bounds, from: anchor), placement: placement, leading: leading, trailing: trailing, value: value)
         NSAnimationContext.runAnimationGroup { context in
-            context.duration = LevelPanelView.popDuration
+            context.duration = SliderPanelView.popDuration
             main.animator().alphaValue = 0
         }
     }
@@ -54,7 +57,7 @@ final class BarView: NSView {
             self?.panel.isHidden = true
         }
         NSAnimationContext.runAnimationGroup { context in
-            context.duration = animated ? LevelPanelView.popDuration : 0
+            context.duration = animated ? SliderPanelView.popDuration : 0
             main.animator().alphaValue = 1
         }
     }
@@ -107,46 +110,56 @@ final class MainRowView: NSView {
     }
 }
 
-/// The level slider, modelled on the native Control Strip: a fixed-size panel whose
-/// right edge sits against the button it pops out of — low icon, track, high icon —
-/// and an ✕ in the button's own slot once the finger lifts.
+/// What sits at either end of a slider panel.
+enum PanelAccessory: Equatable {
+    case symbol(String, size: CGFloat)
+    case text(String)
+}
+
+/// A slider that pops out of a bar item, modelled on the native Control Strip: a
+/// fixed-size panel (end accessories, track) grown out of its anchor, and an ✕ once
+/// the finger lifts. Level controls sit it beside their button like the native strip;
+/// Now Playing centres it over the widget.
 @MainActor
-final class LevelPanelView: NSView {
+final class SliderPanelView: NSView {
+    enum Placement {
+        /// Leftwards from the anchor (rightwards if there's no room); ✕ in the anchor's slot.
+        case besideAnchor
+        /// Centred over the anchor; ✕ next to the panel.
+        case overAnchor
+    }
+
     let slider = GlassSlider(frame: .zero)
     let closeButton = GlassButton(symbol: "xmark")
     /// A touch on the bar outside the panel and the ✕.
     var onOutsideTouch: (() -> Void)?
 
-    private(set) var level: Level?
+    private(set) var isPresented = false
     private let background = NSGlassEffectView()
-    private let lowIcon = NSImageView()
-    private let highIcon = NSImageView()
+    private let leading = AccessoryView()
+    private let trailing = AccessoryView()
     private var panelFrame = NSRect.zero
-    private var buttonFrame = NSRect.zero
+    private var anchorFrame = NSRect.zero
     /// Bumped on every present/dismiss so stale animation callbacks are ignored.
     private var generation = 0
-    /// Clips the slider to the growing panel, so the track emerges from the button.
+    /// Clips the slider to the growing panel, so the track emerges from the anchor.
     private let reveal = CALayer()
 
     // Native geometry, measured on the Touch Bar: a 357 pt panel, icons centred
     // 35 pt in from its ends and a 202 pt track between them.
     static let panelWidth: CGFloat = 357
-    static let iconInset: CGFloat = 35
+    static let accessoryInset: CGFloat = 35
     static let trackInset: CGFloat = 77.5
     static let popDuration: TimeInterval = 0.2
-    private static let buttonGap: CGFloat = 4
+    private static let gap: CGFloat = 4
 
     init() {
         super.init(frame: .zero)
         allowedTouchTypes = .direct
         background.cornerRadius = BarMetrics.height / 2
-        for icon in [lowIcon, highIcon] {
-            icon.contentTintColor = .white
-            icon.imageScaling = .scaleNone
-        }
         slider.trackInset = Self.trackInset
         closeButton.alphaValue = 0
-        [background, lowIcon, highIcon, slider, closeButton].forEach(addSubview)
+        [background, leading, trailing, slider, closeButton].forEach(addSubview)
         reveal.backgroundColor = NSColor.black.cgColor
         reveal.cornerRadius = BarMetrics.height / 2
         slider.wantsLayer = true
@@ -156,30 +169,45 @@ final class LevelPanelView: NSView {
     @available(*, unavailable)
     required init?(coder: NSCoder) { fatalError() }
 
-    func present(_ level: Level, from buttonFrame: NSRect) {
-        self.level = level
-        self.buttonFrame = buttonFrame
-        // Grow leftwards out of the button like the native strip; rightwards if the
-        // button sits too close to the left edge.
-        let leftX = buttonFrame.minX - Self.buttonGap - Self.panelWidth
-        let x = leftX >= 0 ? leftX : min(buttonFrame.maxX + Self.buttonGap, bounds.width - Self.panelWidth)
-        panelFrame = NSRect(x: x, y: 0, width: Self.panelWidth, height: BarMetrics.height)
-        lowIcon.image = Self.symbol(level.lowSymbol, size: 13)
-        highIcon.image = Self.symbol(level.highSymbol, size: 15)
+    func present(from anchorFrame: NSRect, placement: Placement, leading: PanelAccessory, trailing: PanelAccessory, value: Float) {
+        isPresented = true
+        self.anchorFrame = anchorFrame
+        let width = Self.panelWidth
+        let x: CGFloat
+        switch placement {
+        case .besideAnchor:
+            // Grow leftwards out of the button like the native strip; rightwards if the
+            // button sits too close to the left edge.
+            let leftX = anchorFrame.minX - Self.gap - width
+            x = leftX >= 0 ? leftX : min(anchorFrame.maxX + Self.gap, bounds.width - width)
+        case .overAnchor:
+            x = min(max(anchorFrame.midX - width / 2, 0), bounds.width - width)
+        }
+        panelFrame = NSRect(x: x, y: 0, width: width, height: BarMetrics.height)
+        setAccessories(leading: leading, trailing: trailing)
         slider.frame = panelFrame
-        slider.setValue(level.value)
+        slider.setValue(value)
+
         let closeWidth = closeButton.intrinsicContentSize.width
-        closeButton.frame = NSRect(x: buttonFrame.midX - closeWidth / 2, y: 0, width: closeWidth, height: BarMetrics.height)
+        let closeX: CGFloat = switch placement {
+        case .besideAnchor:
+            anchorFrame.midX - closeWidth / 2
+        case .overAnchor:
+            panelFrame.maxX + Self.gap + closeWidth <= bounds.width
+                ? panelFrame.maxX + Self.gap
+                : panelFrame.minX - Self.gap - closeWidth
+        }
+        closeButton.frame = NSRect(x: closeX, y: 0, width: closeWidth, height: BarMetrics.height)
         closeButton.alphaValue = 0
 
-        // Start collapsed into the button, then grow out of it.
-        background.frame = buttonFrame
-        lowIcon.frame = iconFrame(centerX: buttonFrame.midX)
-        highIcon.frame = iconFrame(centerX: buttonFrame.midX)
-        [lowIcon, highIcon].forEach { $0.alphaValue = 0 }
+        // Start collapsed into the anchor, then grow out of it.
+        background.frame = anchorFrame
+        self.leading.frame = accessoryFrame(centerX: anchorFrame.midX)
+        self.trailing.frame = accessoryFrame(centerX: anchorFrame.midX)
+        [self.leading, self.trailing].forEach { $0.alphaValue = 0 }
         slider.alphaValue = 1
         background.alphaValue = 1
-        setReveal(buttonFrame, animated: false)
+        setReveal(anchorFrame, animated: false)
 
         // Animate from the next run-loop turn: only then have the start frames above
         // reached the layers, otherwise everything animates from where it last was.
@@ -193,30 +221,36 @@ final class LevelPanelView: NSView {
                     context.duration = Self.popDuration
                     context.timingFunction = CAMediaTimingFunction(name: .easeOut)
                     self.background.animator().frame = self.panelFrame
-                    self.lowIcon.animator().frame = self.iconFrame(centerX: self.panelFrame.minX + Self.iconInset)
-                    self.highIcon.animator().frame = self.iconFrame(centerX: self.panelFrame.maxX - Self.iconInset)
-                    self.lowIcon.animator().alphaValue = 1
-                    self.highIcon.animator().alphaValue = 1
+                    self.leading.animator().frame = self.accessoryFrame(centerX: self.panelFrame.minX + Self.accessoryInset)
+                    self.trailing.animator().frame = self.accessoryFrame(centerX: self.panelFrame.maxX - Self.accessoryInset)
+                    self.leading.animator().alphaValue = 1
+                    self.trailing.animator().alphaValue = 1
                 }
             }
         }
     }
 
-    /// Collapses back into the button. `completion` runs unless the panel was
+    /// Updates the end accessories in place (e.g. elapsed and remaining time).
+    func setAccessories(leading: PanelAccessory, trailing: PanelAccessory) {
+        self.leading.show(leading, small: true)
+        self.trailing.show(trailing, small: false)
+    }
+
+    /// Collapses back into the anchor. `completion` runs unless the panel was
     /// presented again in the meantime.
     func dismiss(animated: Bool, completion: @escaping @MainActor () -> Void) {
-        level = nil
+        isPresented = false
         generation += 1
         let current = generation
-        setReveal(buttonFrame, animated: animated)
+        setReveal(anchorFrame, animated: animated)
         NSAnimationContext.runAnimationGroup { context in
             context.duration = animated ? Self.popDuration : 0
             context.timingFunction = CAMediaTimingFunction(name: .easeIn)
-            background.animator().frame = buttonFrame
+            background.animator().frame = anchorFrame
             background.animator().alphaValue = 0
-            lowIcon.animator().frame = iconFrame(centerX: buttonFrame.midX)
-            highIcon.animator().frame = iconFrame(centerX: buttonFrame.midX)
-            [lowIcon, highIcon, slider, closeButton].forEach { $0.animator().alphaValue = 0 }
+            leading.animator().frame = accessoryFrame(centerX: anchorFrame.midX)
+            trailing.animator().frame = accessoryFrame(centerX: anchorFrame.midX)
+            [leading, trailing, slider, closeButton].forEach { $0.animator().alphaValue = 0 }
         } completionHandler: {
             MainActor.assumeIsolated {
                 if current == self.generation { completion() }
@@ -257,12 +291,48 @@ final class LevelPanelView: NSView {
         CATransaction.commit()
     }
 
-    private func iconFrame(centerX: CGFloat) -> NSRect {
-        NSRect(x: centerX - 14, y: 0, width: 28, height: BarMetrics.height)
+    private func accessoryFrame(centerX: CGFloat) -> NSRect {
+        NSRect(x: centerX - 28, y: 0, width: 56, height: BarMetrics.height)
+    }
+}
+
+/// An icon or a short label, centred.
+@MainActor
+private final class AccessoryView: NSView {
+    private let image = NSImageView()
+    private let label = NSTextField(labelWithString: "")
+
+    init() {
+        super.init(frame: .zero)
+        image.contentTintColor = .white
+        image.imageScaling = .scaleNone
+        label.font = .monospacedDigitSystemFont(ofSize: 12, weight: .medium)
+        label.textColor = NSColor.white.withAlphaComponent(0.85)
+        label.alignment = .center
+        for view in [image, label] {
+            view.translatesAutoresizingMaskIntoConstraints = false
+            addSubview(view)
+            NSLayoutConstraint.activate([
+                view.centerXAnchor.constraint(equalTo: centerXAnchor),
+                view.centerYAnchor.constraint(equalTo: centerYAnchor),
+            ])
+        }
     }
 
-    private static func symbol(_ name: String, size: CGFloat) -> NSImage? {
-        NSImage(systemSymbolName: name, accessibilityDescription: nil)?
-            .withSymbolConfiguration(.init(pointSize: size, weight: .semibold))
+    @available(*, unavailable)
+    required init?(coder: NSCoder) { fatalError() }
+
+    func show(_ accessory: PanelAccessory, small: Bool) {
+        switch accessory {
+        case .symbol(let name, let size):
+            image.image = NSImage(systemSymbolName: name, accessibilityDescription: nil)?
+                .withSymbolConfiguration(.init(pointSize: size, weight: .semibold))
+            image.isHidden = false
+            label.isHidden = true
+        case .text(let text):
+            if label.stringValue != text { label.stringValue = text }
+            label.isHidden = false
+            image.isHidden = true
+        }
     }
 }

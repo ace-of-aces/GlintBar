@@ -30,7 +30,7 @@ final class GlassSlider: NSView {
     private let glassKnob = NSGlassEffectView()
 
     /// The blue of Apple's own sliders, in its dark-appearance variant (the Touch Bar is always dark).
-    private static let fillColor: CGColor = {
+    static let fillColor: CGColor = {
         var color = NSColor.systemBlue.cgColor
         NSAppearance(named: .darkAqua)?.performAsCurrentDrawingAppearance {
             color = NSColor.systemBlue.cgColor

@@ -21,8 +21,14 @@ final class GlintBar: NSObject, NSTouchBarDelegate {
     private var itemViews: [BarItemKind: NSView] = [:]
     private var frontmostApp: NSRunningApplication?
 
-    // Level panel state.
-    private var activeLevel: Level?
+    // Slider panel state.
+    private enum PanelContent: Equatable {
+        case level(Level)
+        /// Scrubbing through the current track.
+        case media
+    }
+    private var activePanel: PanelContent?
+    private var progressTimer: Timer?
     /// When the open panel closes itself; nil while a finger is on it.
     private var closeDeadline: Date?
     private var panelTimer: Timer?
@@ -62,10 +68,15 @@ final class GlintBar: NSObject, NSTouchBarDelegate {
             // Brightness has no change notification we can use.
             MainActor.assumeIsolated { self?.refresh() }
         }
+        progressTimer = Timer.scheduledTimer(withTimeInterval: 0.5, repeats: true) { [weak self] _ in
+            // Playback position moves continuously; only the media views need it.
+            MainActor.assumeIsolated { self?.updatePlaybackProgress() }
+        }
     }
 
     func stop() {
         pollTimer?.invalidate()
+        progressTimer?.invalidate()
         NowPlayingMonitor.shared.stop()
         TouchBarPrivate.dismiss(touchBar)
         TouchBarPrivate.removeTrayItem(trayItem)
@@ -142,6 +153,15 @@ final class GlintBar: NSObject, NSTouchBarDelegate {
             target.onTouchMoved?(local(parts.count > 1 ? parts[1] : nil, in: target))
         case "up":
             debugButton?.onTouchUp?()
+        case "scrub":
+            // scrub:down · scrub:move:<bar x> · scrub:up — a finger on the Now Playing widget.
+            guard let view = itemViews[.nowPlaying] as? NowPlayingView else { return }
+            let x = parts.count > 2 ? view.convert(NSPoint(x: Double(parts[2]) ?? 0, y: 0), from: barView).x : view.bounds.midX
+            switch parts.count > 1 ? parts[1] : "" {
+            case "down": view.onScrubBegan?(x)
+            case "move": view.onScrubMoved?(x)
+            default: view.onScrubEnded?()
+            }
         case "customize": CustomizeWindowController.shared.show()
         case "cdrag":
             // cdrag:bar:<index> · cdrag:palette:<kind> · cdrag:to:<bar x> · cdrag:off · cdrag:drop
@@ -198,6 +218,7 @@ final class GlintBar: NSObject, NSTouchBarDelegate {
         case .nowPlaying:
             let view = NowPlayingView(width: kind.width)
             view.onTap = Self.togglePlayback
+            wireScrubbing(view)
             return view
         case .clock:
             return ClockView(width: kind.width)
@@ -244,12 +265,8 @@ final class GlintBar: NSObject, NSTouchBarDelegate {
     private func wireLevelButton(_ button: GlassButton, level: Level) {
         button.onTouchDown = { [weak self, weak button] x in
             guard let self, let button else { return }
-            self.openPanel(level, from: button)
-            self.barView.panel.slider.beginTracking(
-                at: self.sliderX(x, from: button),
-                relative: true,
-                liquidDelay: .milliseconds(Int(LevelPanelView.popDuration * 1000))
-            )
+            self.openPanel(.level(level), from: button)
+            self.beginPanelTracking(at: x, from: button)
         }
         button.onTouchMoved = { [weak self, weak button] x in
             guard let self, let button else { return }
@@ -258,17 +275,53 @@ final class GlintBar: NSObject, NSTouchBarDelegate {
         button.onTouchUp = { [weak self] in self?.barView.panel.slider.endTracking() }
     }
 
+    /// Pressing and sliding (or holding) on Now Playing pops a scrubber out of it; the
+    /// song jumps to the new position when the finger lifts.
+    private func wireScrubbing(_ view: NowPlayingView) {
+        view.canScrub = { NowPlayingMonitor.shared.canSeek }
+        view.onScrubBegan = { [weak self, weak view] x in
+            guard let self, let view else { return }
+            self.openPanel(.media, from: view)
+            self.beginPanelTracking(at: x, from: view)
+        }
+        view.onScrubMoved = { [weak self, weak view] x in
+            guard let self, let view else { return }
+            self.barView.panel.slider.continueTracking(at: self.sliderX(x, from: view))
+        }
+        view.onScrubEnded = { [weak self] in self?.barView.panel.slider.endTracking() }
+    }
+
+    private func beginPanelTracking(at x: CGFloat, from view: NSView) {
+        barView.panel.slider.beginTracking(
+            at: sliderX(x, from: view),
+            relative: true,
+            liquidDelay: .milliseconds(Int(SliderPanelView.popDuration * 1000))
+        )
+    }
+
     private func wirePanel() {
         let panel = barView.panel
         panel.closeButton.onTap = { [weak self] in self?.closePanel() }
         panel.onOutsideTouch = { [weak self] in self?.closePanel() }
         panel.slider.onChange = { [weak self] value in
-            self?.activeLevel?.set(value)
-            self?.refresh()
+            guard let self else { return }
+            switch self.activePanel {
+            case .level(let level)?:
+                level.set(value)
+                self.refresh()
+            case .media?:
+                // Only show where the song would jump to; seek once the finger lifts.
+                self.updateTimeLabels(position: Double(value) * (NowPlayingMonitor.shared.duration ?? 0))
+            case nil:
+                break
+            }
         }
         panel.slider.onTouchBegan = { [weak self] in self?.closeDeadline = nil }
         panel.slider.onTouchEnded = { [weak self] in
-            guard let self, self.activeLevel != nil else { return }
+            guard let self, let content = self.activePanel else { return }
+            if content == .media, let duration = NowPlayingMonitor.shared.duration {
+                NowPlayingMonitor.shared.seek(to: Double(self.barView.panel.slider.value) * duration)
+            }
             let delay = Settings.autoCloseDelay
             guard delay > 0 else {
                 self.closePanel()
@@ -284,12 +337,28 @@ final class GlintBar: NSObject, NSTouchBarDelegate {
         barView.panel.slider.convert(NSPoint(x: x, y: 0), from: view).x
     }
 
-    // MARK: - Level panel
+    // MARK: - Slider panel
 
-    private func openPanel(_ level: Level, from button: GlassButton) {
-        activeLevel = level
+    private func openPanel(_ content: PanelContent, from anchor: NSView) {
+        activePanel = content
         closeDeadline = nil
-        barView.openPanel(level, from: button)
+        switch content {
+        case .level(let level):
+            barView.openPanel(
+                from: anchor, placement: .besideAnchor,
+                leading: .symbol(level.lowSymbol, size: 13), trailing: .symbol(level.highSymbol, size: 15),
+                value: level.value
+            )
+        case .media:
+            let nowPlaying = NowPlayingMonitor.shared
+            let position = nowPlaying.position() ?? 0
+            barView.openPanel(
+                from: anchor, placement: .overAnchor,
+                leading: .text(Self.timeText(position)),
+                trailing: .text("-" + Self.timeText((nowPlaying.duration ?? 0) - position)),
+                value: nowPlaying.progress ?? 0
+            )
+        }
         refresh()
 
         // Closing is driven by a deadline checked several times a second rather than a
@@ -316,13 +385,28 @@ final class GlintBar: NSObject, NSTouchBarDelegate {
     }
 
     private func closePanel(animated: Bool = true) {
-        guard activeLevel != nil else { return }
-        activeLevel = nil
+        guard activePanel != nil else { return }
+        activePanel = nil
         panelTimer?.invalidate()
         panelTimer = nil
         closeDeadline = nil
         barView.panel.slider.endTracking()
         barView.closePanel(animated: animated)
+    }
+
+    private func updateTimeLabels(position: Double) {
+        let duration = NowPlayingMonitor.shared.duration ?? 0
+        barView.panel.setAccessories(
+            leading: .text(Self.timeText(position)),
+            trailing: .text("-" + Self.timeText(duration - position))
+        )
+    }
+
+    /// 3:07, or 1:02:33 past an hour.
+    private static func timeText(_ seconds: Double) -> String {
+        let total = max(Int(seconds.rounded(.down)), 0)
+        let hours = total / 3600, minutes = total % 3600 / 60, secs = total % 60
+        return hours > 0 ? String(format: "%d:%02d:%02d", hours, minutes, secs) : String(format: "%d:%02d", minutes, secs)
     }
 
     // MARK: - State → UI
@@ -349,12 +433,27 @@ final class GlintBar: NSObject, NSTouchBarDelegate {
         case nil: "playpause.fill"
         }
         (itemViews[.playPause] as? GlassButton)?.setSymbol(playSymbol)
-        (itemViews[.nowPlaying] as? NowPlayingView)?.update(title: nowPlaying.title, artist: nowPlaying.artist)
         (itemViews[.clock] as? ClockView)?.update()
+        updatePlaybackProgress()
 
-        if let level = activeLevel {
+        if case .level(let level)? = activePanel {
             barView.panel.slider.setValue(level.value)
         }
+    }
+
+    /// The Now Playing widget's line, and the scrubber while it's open and not held.
+    private func updatePlaybackProgress() {
+        let nowPlaying = NowPlayingMonitor.shared
+        (itemViews[.nowPlaying] as? NowPlayingView)?.update(title: nowPlaying.title, artist: nowPlaying.artist, progress: nowPlaying.progress)
+        guard activePanel == .media else { return }
+        guard nowPlaying.canSeek else {
+            closePanel() // the track ended or the player went away
+            return
+        }
+        let slider = barView.panel.slider
+        guard !slider.isTracking else { return }
+        slider.setValue(nowPlaying.progress ?? 0)
+        updateTimeLabels(position: nowPlaying.position() ?? 0)
     }
 
     private func updateAppButton() {

@@ -19,6 +19,9 @@ the Touch Bar system-wide with its own controls, built on real `NSGlassEffectVie
 - When the finger lifts, an ✕ appears in the button's slot and the slider **closes
   itself** 1.5 s later (configurable from the menu bar).
 - **Play/pause shows the real playback state** (see below).
+- **Now Playing** shows the track with a blue progress line. Tap it to play or pause;
+  press and slide (or press and hold) to pop out a scrubber with elapsed and remaining
+  time. The song jumps to the new position when you let go.
 - **App controls**: tap the app icon on the left to hand the Touch Bar back to the
   frontmost app's own controls. The ✨ button in Apple's Control Strip brings Glint back.
 - **Customizable**: choose **Customize Touch Bar…** from the ✨ menu (or open Glint.app
@@ -48,7 +51,8 @@ osascript -l JavaScript -e 'ObjC.import("Foundation"); $.NSDistributedNotificati
 
 Commands simulate a finger on a level button (x positions in bar points):
 `down:volume` (or `down:volume:850`), `move:700`, `up`, `tap:display`; plus `close`,
-`appControls` and `glint`. For the customization window: `customize`,
+`appControls` and `glint`; `scrub:down`, `scrub:move:<x>`, `scrub:up` for Now Playing.
+For the customization window: `customize`,
 `snapshot:<png path>`, and drags with `cdrag:bar:<index>` or `cdrag:palette:<item>`,
 then `cdrag:to:<x>` or `cdrag:off`, then `cdrag:drop`.
 
@@ -64,13 +68,14 @@ instead of crashing:
 | Display brightness | `DisplayServicesGetBrightness` / `SetBrightness` (DisplayServices) |
 | Keyboard backlight | `KeyboardBrightnessClient` (CoreBrightness) |
 | Media commands | `MRMediaRemoteSendCommand` (MediaRemote) |
-| Playback state | MediaRemote, queried from inside `/usr/bin/perl` ([`GlintNowPlaying`](Sources/GlintNowPlaying)) |
+| Playback state, seeking | MediaRemote, from inside `/usr/bin/perl` ([`GlintNowPlaying`](Sources/GlintNowPlaying)) |
 | Volume / mute | CoreAudio (public) |
 
 Since macOS 15.4 MediaRemote tells third-party processes that nothing is playing.
 `NowPlayingMonitor` therefore loads the small `libGlintNowPlaying.dylib` into the
 Apple-signed `/usr/bin/perl`, which may still ask, and reads its state changes as JSON
-lines. The helper exits when Glint's end of its stdin pipe closes.
+lines. Seek requests go the other way, as lines on the helper's stdin. The helper exits
+when Glint's end of that pipe closes.
 
 The whole bar is a single Touch Bar item ([`BarView`](Sources/Glint/TouchBar/BarView.swift)),
 so Glint controls layout and the transitions between the main row and the level panel.

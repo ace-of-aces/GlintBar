@@ -46,7 +46,22 @@ struct ItemPreview: View {
             .lineLimit(1)
             .frame(maxWidth: .infinity, alignment: .leading)
             .padding(.horizontal, 14)
+            .offset(y: -1.5)
             .frame(maxHeight: .infinity)
+            .overlay(alignment: .bottom) {
+                // Progress line, as on the Touch Bar.
+                let progress = CGFloat(NowPlayingMonitor.shared.progress ?? 0.35)
+                Capsule()
+                    .fill(.white.opacity(0.18))
+                    .overlay(alignment: .leading) {
+                        GeometryReader { proxy in
+                            Capsule().fill(Color(cgColor: GlassSlider.fillColor)).frame(width: proxy.size.width * progress)
+                        }
+                    }
+                    .frame(height: 2)
+                    .padding(.horizontal, 15)
+                    .padding(.bottom, 2.5)
+            }
             .glassEffect(.regular, in: .capsule)
         case .appControls:
             Image(nsImage: Self.finderIcon)

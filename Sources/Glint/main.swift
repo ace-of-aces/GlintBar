@@ -8,6 +8,9 @@ if let bundleID = Bundle.main.bundleIdentifier,
     exit(0)
 }
 
+// Writing to the now-playing helper's pipe after it exited must fail, not kill us.
+signal(SIGPIPE, SIG_IGN)
+
 let delegate = AppDelegate()
 app.delegate = delegate
 app.setActivationPolicy(.accessory)

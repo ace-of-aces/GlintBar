@@ -10,7 +10,14 @@ final class NowPlayingMonitor {
     private(set) var isPlaying: Bool?
     private(set) var title: String?
     private(set) var artist: String?
+    /// Track length in seconds, when the player reports one (live streams don't).
+    private(set) var duration: Double?
     var onChange: (() -> Void)?
+
+    /// The position the player last reported, when it was true, and how fast it moves.
+    private var reportedElapsed: Double?
+    private var reportedAt = Date()
+    private var reportedRate: Double = 0
 
     private var process: Process?
     private var input: Pipe?
@@ -42,7 +49,39 @@ final class NowPlayingMonitor {
     /// Flips the state right away after a play/pause tap; the helper confirms or corrects it.
     func assumeToggled() {
         guard let isPlaying else { return }
+        // Freeze or resume the position along with it.
+        reportedElapsed = position()
+        reportedAt = Date()
+        reportedRate = isPlaying ? 0 : 1
         self.isPlaying = !isPlaying
+        onChange?()
+    }
+
+    /// The playback position in seconds, extrapolated from the last report.
+    func position(at date: Date = Date()) -> Double? {
+        guard let reportedElapsed else { return nil }
+        let rate = isPlaying == true ? reportedRate : 0
+        let position = reportedElapsed + rate * date.timeIntervalSince(reportedAt)
+        return min(max(position, 0), duration ?? .infinity)
+    }
+
+    /// Position as a fraction of the track, if both are known.
+    var progress: Float? {
+        guard let duration, duration > 0, let position = position() else { return nil }
+        return Float(position / duration)
+    }
+
+    var canSeek: Bool { (duration ?? 0) > 0 && input != nil }
+
+    /// Asks the player to jump to `seconds`. Seeking needs the same standing as reading
+    /// the state, so it goes through the helper.
+    func seek(to seconds: Double) {
+        guard canSeek, let input else { return }
+        let target = min(max(seconds, 0), duration ?? seconds)
+        // Throwing API: a helper that just died must not take Glint down with it.
+        try? input.fileHandleForWriting.write(contentsOf: Data("seek \(target)\n".utf8))
+        reportedElapsed = target
+        reportedAt = Date()
         onChange?()
     }
 
@@ -135,6 +174,10 @@ final class NowPlayingMonitor {
             isPlaying = object["playing"] as? Bool
             title = object["title"] as? String
             artist = object["artist"] as? String
+            duration = object["duration"] as? Double
+            reportedElapsed = object["elapsed"] as? Double
+            reportedRate = object["rate"] as? Double ?? (isPlaying == true ? 1 : 0)
+            reportedAt = (object["timestamp"] as? Double).map(Date.init(timeIntervalSince1970:)) ?? Date()
             onChange?()
         }
     }
