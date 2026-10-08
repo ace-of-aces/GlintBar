@@ -10,7 +10,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         guard TouchBarPrivate.isAvailable else {
             let alert = NSAlert()
             alert.messageText = "Glint can't control the Touch Bar"
-            alert.informativeText = "This version of macOS doesn't provide the Touch Bar interfaces Glint needs."
+            alert.informativeText =
+                "This version of macOS doesn't provide the Touch Bar interfaces Glint needs."
             alert.runModal()
             NSApp.terminate(nil)
             return
@@ -21,26 +22,28 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         bar.onStateChange = { [weak self] in self?.updateStatusIcon() }
         bar.start()
         #if DEBUG
-        listenForDebugCommands()
+            listenForDebugCommands()
         #endif
     }
 
     #if DEBUG
-    /// Lets the bar be driven without touching it, e.g.:
-    /// osascript -l JavaScript -e 'ObjC.import("Foundation"); $.NSDistributedNotificationCenter.defaultCenter
-    ///   .postNotificationNameObjectUserInfoDeliverImmediately("center.julian.Glint.debug", "slider:volume", $(), true)'
-    private func listenForDebugCommands() {
-        DistributedNotificationCenter.default().addObserver(
-            forName: .init("center.julian.Glint.debug"), object: nil, queue: .main
-        ) { [weak self] note in
-            let command = note.object as? String ?? ""
-            MainActor.assumeIsolated { self?.bar.debug(command) }
+        /// Lets the bar be driven without touching it, e.g.:
+        /// osascript -l JavaScript -e 'ObjC.import("Foundation"); $.NSDistributedNotificationCenter.defaultCenter
+        ///   .postNotificationNameObjectUserInfoDeliverImmediately("center.julian.Glint.debug", "slider:volume", $(), true)'
+        private func listenForDebugCommands() {
+            DistributedNotificationCenter.default().addObserver(
+                forName: .init("center.julian.Glint.debug"), object: nil, queue: .main
+            ) { [weak self] note in
+                let command = note.object as? String ?? ""
+                MainActor.assumeIsolated { self?.bar.debug(command) }
+            }
         }
-    }
     #endif
 
     /// Opening Glint.app again while it runs (Finder, Spotlight, `open`) shows the customizer.
-    func applicationShouldHandleReopen(_ sender: NSApplication, hasVisibleWindows flag: Bool) -> Bool {
+    func applicationShouldHandleReopen(_ sender: NSApplication, hasVisibleWindows flag: Bool)
+        -> Bool
+    {
         customize()
         return false
     }
@@ -64,7 +67,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
                 MainActor.assumeIsolated { self?.scheduleReassert() }
             }
         }
-        center.addObserver(forName: NSWorkspace.didActivateApplicationNotification, object: nil, queue: .main) { [weak self] note in
+        center.addObserver(
+            forName: NSWorkspace.didActivateApplicationNotification, object: nil, queue: .main
+        ) { [weak self] note in
             let app = note.userInfo?[NSWorkspace.applicationUserInfoKey] as? NSRunningApplication
             MainActor.assumeIsolated { self?.bar.frontmostAppChanged(app) }
         }
@@ -92,8 +97,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     }
 
     private func updateStatusIcon() {
-        let symbol = bar.state == .glint ? "sparkles.rectangle.stack.fill" : "sparkles.rectangle.stack"
-        statusItem?.button?.image = NSImage(systemSymbolName: symbol, accessibilityDescription: "Glint")
+        let symbol =
+            bar.state == .glint ? "sparkles.rectangle.stack.fill" : "sparkles.rectangle.stack"
+        statusItem?.button?.image =
+            NSImage(systemSymbolName: symbol, accessibilityDescription: "Glint")
             ?? NSImage(systemSymbolName: "sparkles", accessibilityDescription: "Glint")
     }
 
@@ -101,19 +108,26 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         menu.removeAllItems()
 
         if bar.state == .glint {
-            menu.addItem(withTitle: "Show App Controls", action: #selector(showAppControls), keyEquivalent: "").target = self
+            menu.addItem(
+                withTitle: "Show App Controls", action: #selector(showAppControls),
+                keyEquivalent: ""
+            ).target = self
         } else {
-            menu.addItem(withTitle: "Show Glint", action: #selector(showGlint), keyEquivalent: "").target = self
+            menu.addItem(withTitle: "Show Glint", action: #selector(showGlint), keyEquivalent: "")
+                .target = self
         }
         menu.addItem(.separator())
 
-        menu.addItem(withTitle: "Customize Touch Bar…", action: #selector(customize), keyEquivalent: ",").target = self
+        menu.addItem(
+            withTitle: "Customize Glint Bar", action: #selector(customize), keyEquivalent: ","
+        ).target = self
 
         let autoClose = NSMenuItem(title: "Hide Sliders After", action: nil, keyEquivalent: "")
         let choices = NSMenu()
         for delay in Settings.autoCloseChoices {
             let title = delay == 0 ? "No Delay" : "\(delay.formatted()) s"
-            let choice = NSMenuItem(title: title, action: #selector(setAutoClose(_:)), keyEquivalent: "")
+            let choice = NSMenuItem(
+                title: title, action: #selector(setAutoClose(_:)), keyEquivalent: "")
             choice.target = self
             choice.representedObject = delay
             choice.state = Settings.autoCloseDelay == delay ? .on : .off
@@ -122,7 +136,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         autoClose.submenu = choices
         menu.addItem(autoClose)
 
-        let login = NSMenuItem(title: "Launch at Login", action: #selector(toggleLaunchAtLogin), keyEquivalent: "")
+        let login = NSMenuItem(
+            title: "Launch at Login", action: #selector(toggleLaunchAtLogin), keyEquivalent: "")
         login.target = self
         login.state = Settings.launchAtLogin ? .on : .off
         if !Settings.canLaunchAtLogin {
@@ -132,7 +147,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         menu.addItem(login)
 
         menu.addItem(.separator())
-        menu.addItem(withTitle: "Quit Glint", action: #selector(NSApplication.terminate(_:)), keyEquivalent: "q")
+        menu.addItem(
+            withTitle: "Quit Glint", action: #selector(NSApplication.terminate(_:)),
+            keyEquivalent: "q")
     }
 
     @objc private func showGlint() { bar.showGlint() }

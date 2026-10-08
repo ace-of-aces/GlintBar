@@ -17,12 +17,12 @@ struct CustomizeView: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
             header
-                .padding(.bottom, 22)
+                .padding(.bottom, 24)
+            palette
             touchBar
+                .padding(.top, 30)
                 .padding(.bottom, 10)
             hint
-                .padding(.bottom, 26)
-            palette
             Divider()
                 .padding(.vertical, 20)
             footer
@@ -42,9 +42,9 @@ struct CustomizeView: View {
 
     private var header: some View {
         VStack(alignment: .leading, spacing: 4) {
-            Text("Customize Touch Bar")
+            Text("Customize Glint Bar")
                 .font(.title2.weight(.semibold))
-            Text("Your Touch Bar updates as you go.")
+            Text("Your Glint Bar updates as you go.")
                 .foregroundStyle(.secondary)
         }
     }
@@ -132,7 +132,7 @@ struct CustomizeView: View {
                 Label("Release to remove \(drag.item.kind.title).", systemImage: "minus.circle")
                     .foregroundStyle(.secondary)
             } else {
-                Text("Drag items into the Touch Bar, drag them along it to rearrange, and drag them out to remove them.")
+                Text("Drag items into the Glint Bar, drag them along it to rearrange, and drag them out to remove them.")
                     .foregroundStyle(.secondary)
             }
         }
@@ -185,7 +185,7 @@ struct CustomizeView: View {
         }
         .frame(minWidth: 86)
         .opacity(isUsed || isUnavailable ? 0.38 : 1)
-        .help(isUsed ? "Already in the Touch Bar" : isUnavailable ? "Not available on this Mac right now" : "Drag into the Touch Bar, or click to add it at the end")
+        .help(isUsed ? "Already in the Glint Bar" : isUnavailable ? "Not available on this Mac right now" : "Drag into the Glint Bar, or click to add it at the end")
         .contentShape(Rectangle())
         .onTapGesture { if !isUsed { append(kind) } }
         .gesture(

@@ -9,7 +9,7 @@ final class CustomizeWindowController: NSWindowController, NSWindowDelegate {
 
     private init() {
         let window = NSWindow(contentRect: .zero, styleMask: [.titled, .closable, .fullSizeContentView], backing: .buffered, defer: true)
-        window.title = "Customize Touch Bar"
+        window.title = "Customize Glint Bar"
         window.titleVisibility = .hidden
         window.titlebarAppearsTransparent = true
         window.isMovableByWindowBackground = true

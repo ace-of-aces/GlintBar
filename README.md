@@ -24,7 +24,7 @@ the Touch Bar system-wide with its own controls, built on real `NSGlassEffectVie
   time. The song jumps to the new position when you let go.
 - **App controls**: tap the app icon on the left to hand the Touch Bar back to the
   frontmost app's own controls. The ✨ button in Apple's Control Strip brings Glint back.
-- **Customizable**: choose **Customize Touch Bar…** from the ✨ menu (or open Glint.app
+- **Customizable**: choose **Customize Glint Bar…** from the ✨ menu (or open Glint.app
   again) to drag items into the bar, along it and out of it. The Touch Bar follows along
   live. Besides the defaults there are Now Playing, Clock, Mission Control, Apps and
   Lock Screen, plus spaces and flexible spaces.
