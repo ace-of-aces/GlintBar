@@ -39,6 +39,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     }
     #endif
 
+    /// Opening Glint.app again while it runs (Finder, Spotlight, `open`) shows the customizer.
+    func applicationShouldHandleReopen(_ sender: NSApplication, hasVisibleWindows flag: Bool) -> Bool {
+        customize()
+        return false
+    }
+
     func applicationWillTerminate(_ notification: Notification) {
         bar.stop()
     }
@@ -101,6 +107,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         }
         menu.addItem(.separator())
 
+        menu.addItem(withTitle: "Customize Touch Bar…", action: #selector(customize), keyEquivalent: ",").target = self
+
         let autoClose = NSMenuItem(title: "Hide Sliders After", action: nil, keyEquivalent: "")
         let choices = NSMenu()
         for delay in Settings.autoCloseChoices {
@@ -128,6 +136,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     }
 
     @objc private func showGlint() { bar.showGlint() }
+
+    @objc private func customize() {
+        // Show Glint's own bar so changes are visible on the Touch Bar while editing.
+        if bar.state != .glint { bar.showGlint() }
+        CustomizeWindowController.shared.show()
+    }
     @objc private func showAppControls() { bar.showAppControls() }
 
     @objc private func setAutoClose(_ sender: NSMenuItem) {

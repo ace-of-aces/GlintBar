@@ -100,7 +100,22 @@ enum Media {
 @MainActor
 enum SystemActions {
     static func screenshot() {
-        let url = URL(fileURLWithPath: "/System/Applications/Utilities/Screenshot.app")
-        NSWorkspace.shared.openApplication(at: url, configuration: .init())
+        open("/System/Applications/Utilities/Screenshot.app")
+    }
+
+    static func missionControl() {
+        open("/System/Applications/Mission Control.app")
+    }
+
+    static func apps() {
+        open("/System/Applications/Apps.app")
+    }
+
+    static func lockScreen() {
+        GLLockScreen()
+    }
+
+    private static func open(_ path: String) {
+        NSWorkspace.shared.openApplication(at: URL(fileURLWithPath: path), configuration: .init())
     }
 }

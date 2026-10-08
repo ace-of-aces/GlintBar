@@ -4,10 +4,6 @@ enum BarMetrics {
     /// Usable width of the Touch Bar to the right of the Esc key, in points.
     static let width: CGFloat = 1004
     static let height: CGFloat = 30
-    static let gap: CGFloat = 8
-    static let groupGap: CGFloat = 18
-    static let buttonWidth: CGFloat = 56
-    static let compactButtonWidth: CGFloat = 44
 }
 
 /// The whole Glint bar: a row of controls, plus the level panel that pops out of a
@@ -64,53 +60,50 @@ final class BarView: NSView {
     }
 }
 
-/// App switcher and media on the left, the system strip on the right.
+/// The configurable row of items. Views are owned by `GlintBar`; this view only
+/// shows and positions them according to `BarLayout`.
 @MainActor
 final class MainRowView: NSView {
-    let appButton = GlassButton(symbol: "app.dashed", width: BarMetrics.compactButtonWidth)
-    let previousButton = GlassButton(symbol: "backward.fill", width: BarMetrics.compactButtonWidth)
-    let playPauseButton = GlassButton(symbol: "playpause.fill")
-    let nextButton = GlassButton(symbol: "forward.fill", width: BarMetrics.compactButtonWidth)
+    private var kinds: [BarItemKind] = []
+    private var views: [BarItemKind: NSView] = [:]
+    /// Views added by the last `setLayout`, which fade in instead of sliding.
+    private var addedKinds: Set<BarItemKind> = []
+    private var animateNextLayout = false
 
-    let keyboardButton = GlassButton(symbol: "light.max")
-    let displayButton = GlassButton(symbol: "sun.max.fill")
-    let volumeButton = GlassButton(symbol: "speaker.wave.2.fill")
-    let muteButton = GlassButton(symbol: "speaker.slash.fill", width: BarMetrics.compactButtonWidth)
-    let screenshotButton = GlassButton(symbol: "camera.fill", width: BarMetrics.compactButtonWidth)
-
-    private var leftGroups: [[NSView]] { [[appButton], [previousButton, playPauseButton, nextButton]] }
-    private var rightGroups: [[NSView]] { [[keyboardButton, displayButton, volumeButton, muteButton], [screenshotButton]] }
-
-    init() {
-        super.init(frame: .zero)
-        for view in (leftGroups + rightGroups).flatMap({ $0 }) { addSubview(view) }
+    func setLayout(_ kinds: [BarItemKind], views: [BarItemKind: NSView]) {
+        for (kind, view) in self.views where views[kind] !== view || !kinds.contains(kind) {
+            view.removeFromSuperview()
+        }
+        animateNextLayout = !self.kinds.isEmpty && window != nil
+        self.kinds = kinds
+        self.views = views.filter { kinds.contains($0.key) }
+        addedKinds = []
+        for (kind, view) in self.views where view.superview !== self {
+            addSubview(view)
+            addedKinds.insert(kind)
+        }
+        needsLayout = true
     }
-
-    @available(*, unavailable)
-    required init?(coder: NSCoder) { fatalError() }
 
     override func layout() {
         super.layout()
-        var x: CGFloat = 0
-        for (index, group) in leftGroups.enumerated() {
-            if index > 0 { x += BarMetrics.groupGap - BarMetrics.gap }
-            for view in group {
-                let width = view.intrinsicContentSize.width
-                view.frame = NSRect(x: x, y: 0, width: width, height: BarMetrics.height)
-                x += width + BarMetrics.gap
+        let animate = animateNextLayout
+        animateNextLayout = false
+        NSAnimationContext.runAnimationGroup { context in
+            context.duration = animate ? 0.25 : 0
+            context.timingFunction = CAMediaTimingFunction(name: .easeOut)
+            for (kind, frame) in zip(kinds, BarLayout.frames(for: kinds, in: bounds.size)) {
+                guard let view = views[kind] else { continue }
+                if animate, addedKinds.contains(kind) {
+                    view.frame = frame
+                    view.alphaValue = 0
+                    view.animator().alphaValue = 1
+                } else {
+                    (animate ? view.animator() : view).frame = frame
+                }
             }
         }
-
-        x = bounds.width
-        for (index, group) in rightGroups.reversed().enumerated() {
-            if index > 0 { x -= BarMetrics.groupGap - BarMetrics.gap }
-            for view in group.reversed() {
-                let width = view.intrinsicContentSize.width
-                x -= width
-                view.frame = NSRect(x: x, y: 0, width: width, height: BarMetrics.height)
-                x -= BarMetrics.gap
-            }
-        }
+        addedKinds = []
     }
 }
 
@@ -120,7 +113,7 @@ final class MainRowView: NSView {
 @MainActor
 final class LevelPanelView: NSView {
     let slider = GlassSlider(frame: .zero)
-    let closeButton = GlassButton(symbol: "xmark", width: BarMetrics.compactButtonWidth)
+    let closeButton = GlassButton(symbol: "xmark")
     /// A touch on the bar outside the panel and the ✕.
     var onOutsideTouch: (() -> Void)?
 
@@ -166,10 +159,11 @@ final class LevelPanelView: NSView {
     func present(_ level: Level, from buttonFrame: NSRect) {
         self.level = level
         self.buttonFrame = buttonFrame
-        panelFrame = NSRect(
-            x: max(buttonFrame.minX - Self.buttonGap - Self.panelWidth, 0),
-            y: 0, width: Self.panelWidth, height: BarMetrics.height
-        )
+        // Grow leftwards out of the button like the native strip; rightwards if the
+        // button sits too close to the left edge.
+        let leftX = buttonFrame.minX - Self.buttonGap - Self.panelWidth
+        let x = leftX >= 0 ? leftX : min(buttonFrame.maxX + Self.buttonGap, bounds.width - Self.panelWidth)
+        panelFrame = NSRect(x: x, y: 0, width: Self.panelWidth, height: BarMetrics.height)
         lowIcon.image = Self.symbol(level.lowSymbol, size: 13)
         highIcon.image = Self.symbol(level.highSymbol, size: 15)
         slider.frame = panelFrame

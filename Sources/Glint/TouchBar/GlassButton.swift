@@ -23,7 +23,7 @@ final class GlassButton: NSView {
     private var touchStartX: CGFloat = 0
     private var isPressed = false
 
-    init(symbol: String, width: CGFloat = BarMetrics.buttonWidth) {
+    init(symbol: String, width: CGFloat = 44) {
         self.width = width
         super.init(frame: NSRect(x: 0, y: 0, width: width, height: BarMetrics.height))
         allowedTouchTypes = .direct

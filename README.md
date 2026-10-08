@@ -21,7 +21,11 @@ the Touch Bar system-wide with its own controls, built on real `NSGlassEffectVie
 - **Play/pause shows the real playback state** (see below).
 - **App controls**: tap the app icon on the left to hand the Touch Bar back to the
   frontmost app's own controls. The ✨ button in Apple's Control Strip brings Glint back.
-- Menu bar item for switching modes, the auto-close delay and launch at login.
+- **Customizable**: choose **Customize Touch Bar…** from the ✨ menu (or open Glint.app
+  again) to drag items into the bar, along it and out of it. The Touch Bar follows along
+  live. Besides the defaults there are Now Playing, Clock, Mission Control, Apps and
+  Lock Screen, plus spaces and flexible spaces.
+- Menu bar item for switching modes, customizing, the auto-close delay and launch at login.
 
 ## Build & run
 
@@ -44,7 +48,9 @@ osascript -l JavaScript -e 'ObjC.import("Foundation"); $.NSDistributedNotificati
 
 Commands simulate a finger on a level button (x positions in bar points):
 `down:volume` (or `down:volume:850`), `move:700`, `up`, `tap:display`; plus `close`,
-`appControls` and `glint`.
+`appControls` and `glint`. For the customization window: `customize`,
+`snapshot:<png path>`, and drags with `cdrag:bar:<index>` or `cdrag:palette:<item>`,
+then `cdrag:to:<x>` or `cdrag:off`, then `cdrag:drop`.
 
 ## How it works
 

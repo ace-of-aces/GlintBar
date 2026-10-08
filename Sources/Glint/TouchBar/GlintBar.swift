@@ -17,6 +17,9 @@ final class GlintBar: NSObject, NSTouchBarDelegate {
     private let trayItem = NSCustomTouchBarItem(identifier: GlintBar.trayItemID)
 
     private var pollTimer: Timer?
+    /// One view per item kind in use (spacers have none), created on demand.
+    private var itemViews: [BarItemKind: NSView] = [:]
+    private var frontmostApp: NSRunningApplication?
 
     // Level panel state.
     private var activeLevel: Level?
@@ -41,11 +44,12 @@ final class GlintBar: NSObject, NSTouchBarDelegate {
         trayButton.isBordered = false
         trayItem.view = trayButton
 
-        wireMainRow()
         wirePanel()
         AudioController.shared.onChange = { [weak self] in self?.refresh() }
         NowPlayingMonitor.shared.onChange = { [weak self] in self?.refresh() }
-        updateAppButton(NSWorkspace.shared.frontmostApplication)
+        BarConfiguration.shared.onChange = { [weak self] in self?.applyLayout() }
+        frontmostApp = NSWorkspace.shared.frontmostApplication
+        applyLayout()
     }
 
     // MARK: - Lifecycle
@@ -96,7 +100,8 @@ final class GlintBar: NSObject, NSTouchBarDelegate {
     }
 
     func frontmostAppChanged(_ app: NSRunningApplication?) {
-        updateAppButton(app)
+        frontmostApp = app
+        updateAppButton()
     }
 
     func touchBar(_ touchBar: NSTouchBar, makeItemForIdentifier identifier: NSTouchBarItem.Identifier) -> NSTouchBarItem? {
@@ -114,13 +119,13 @@ final class GlintBar: NSObject, NSTouchBarDelegate {
     /// `appControls` and `glint`.
     func debug(_ command: String) {
         let parts = command.split(separator: ":").map(String.init)
-        let row = barView.main
         func button(for name: String) -> GlassButton {
-            switch name {
-            case "keyboard": row.keyboardButton
-            case "display": row.displayButton
-            default: row.volumeButton
+            let kind: BarItemKind = switch name {
+            case "keyboard": .keyboardBrightness
+            case "display": .displayBrightness
+            default: .volume
             }
+            return itemViews[kind] as? GlassButton ?? GlassButton(symbol: "questionmark")
         }
         func local(_ barX: String?, in button: GlassButton) -> CGFloat {
             guard let barX, let x = Double(barX) else { return button.bounds.midX }
@@ -137,6 +142,18 @@ final class GlintBar: NSObject, NSTouchBarDelegate {
             target.onTouchMoved?(local(parts.count > 1 ? parts[1] : nil, in: target))
         case "up":
             debugButton?.onTouchUp?()
+        case "customize": CustomizeWindowController.shared.show()
+        case "cdrag":
+            // cdrag:bar:<index> · cdrag:palette:<kind> · cdrag:to:<bar x> · cdrag:off · cdrag:drop
+            let driver = CustomizeDebugDriver.shared
+            switch parts.count > 1 ? parts[1] : "" {
+            case "bar": driver.perform(.pickUpBarItem(index: Int(parts[2]) ?? 0))
+            case "palette": BarItemKind(rawValue: parts[2]).map { driver.perform(.pickUpPaletteItem($0)) }
+            case "to": driver.perform(.moveOverBar(x: CGFloat(Double(parts[2]) ?? 0)))
+            case "off": driver.perform(.moveOffBar)
+            default: driver.perform(.drop)
+            }
+        case "snapshot": CustomizeWindowController.shared.debugSnapshot(to: parts.count > 1 ? parts[1...].joined(separator: ":") : "/tmp/glint-customize.png")
         case "close": closePanel()
         case "appControls": showAppControls()
         case "glint": showGlint()
@@ -147,40 +164,98 @@ final class GlintBar: NSObject, NSTouchBarDelegate {
 
     // MARK: - Wiring
 
-    private func wireMainRow() {
-        let row = barView.main
-        row.appButton.onTap = { [weak self] in self?.showAppControls() }
-        row.previousButton.onTap = { Media.send(.previousTrack) }
-        row.playPauseButton.onTap = {
-            Media.send(.togglePlayPause)
-            NowPlayingMonitor.shared.assumeToggled()
-        }
-        row.nextButton.onTap = { Media.send(.nextTrack) }
-        row.muteButton.onTap = { [weak self] in
-            AudioController.shared.isMuted.toggle()
-            self?.refresh()
-        }
-        row.screenshotButton.onTap = { SystemActions.screenshot() }
+    // MARK: - Items
 
-        // Like the native Control Strip: touching a level button pops its slider out
-        // of it straight away, and the same touch keeps dragging the knob (relative to
-        // where it is, so nothing jumps).
-        for (button, level) in [(row.keyboardButton, Level.keyboard), (row.displayButton, .display), (row.volumeButton, .volume)] {
-            button.onTouchDown = { [weak self, weak button] x in
-                guard let self, let button else { return }
-                self.openPanel(level, from: button)
-                self.barView.panel.slider.beginTracking(
-                    at: self.sliderX(x, from: button),
-                    relative: true,
-                    liquidDelay: .milliseconds(Int(LevelPanelView.popDuration * 1000))
-                )
-            }
-            button.onTouchMoved = { [weak self, weak button] x in
-                guard let self, let button else { return }
-                self.barView.panel.slider.continueTracking(at: self.sliderX(x, from: button))
-            }
-            button.onTouchUp = { [weak self] in self?.barView.panel.slider.endTracking() }
+    /// Shows the configured items, minus controls this Mac can't use right now
+    /// (no keyboard backlight, lid closed, an output without volume control).
+    private func applyLayout() {
+        let kinds = visibleKinds
+        var views: [BarItemKind: NSView] = [:]
+        for kind in kinds where !kind.isSpacer {
+            views[kind] = itemView(for: kind)
         }
+        barView.main.setLayout(kinds, views: views)
+        layoutKinds = kinds
+        refresh()
+    }
+
+    private var layoutKinds: [BarItemKind] = []
+
+    private var visibleKinds: [BarItemKind] {
+        let configuration = BarConfiguration.shared
+        return (configuration.previewKinds ?? configuration.kinds).filter { $0.level?.isAvailable ?? true }
+    }
+
+    private func itemView(for kind: BarItemKind) -> NSView {
+        if let view = itemViews[kind] { return view }
+        let view = makeItemView(kind)
+        itemViews[kind] = view
+        return view
+    }
+
+    private func makeItemView(_ kind: BarItemKind) -> NSView {
+        switch kind {
+        case .nowPlaying:
+            let view = NowPlayingView(width: kind.width)
+            view.onTap = Self.togglePlayback
+            return view
+        case .clock:
+            return ClockView(width: kind.width)
+        default:
+            break
+        }
+
+        let button = GlassButton(symbol: kind.symbol ?? "app.dashed", width: kind.width)
+        if let level = kind.level {
+            wireLevelButton(button, level: level)
+            return button
+        }
+        button.onTap = { [weak self] in
+            switch kind {
+            case .appControls: self?.showAppControls()
+            case .previousTrack: Media.send(.previousTrack)
+            case .playPause: Self.togglePlayback()
+            case .nextTrack: Media.send(.nextTrack)
+            case .mute:
+                AudioController.shared.isMuted.toggle()
+                self?.refresh()
+            case .screenshot: SystemActions.screenshot()
+            case .missionControl: SystemActions.missionControl()
+            case .apps: SystemActions.apps()
+            case .lockScreen: SystemActions.lockScreen()
+            default: break
+            }
+        }
+        if kind == .appControls {
+            itemViews[kind] = button
+            updateAppButton()
+        }
+        return button
+    }
+
+    private static func togglePlayback() {
+        Media.send(.togglePlayPause)
+        NowPlayingMonitor.shared.assumeToggled()
+    }
+
+    /// Like the native Control Strip: touching a level button pops its slider out of
+    /// it straight away, and the same touch keeps dragging the knob (relative to where
+    /// it is, so nothing jumps).
+    private func wireLevelButton(_ button: GlassButton, level: Level) {
+        button.onTouchDown = { [weak self, weak button] x in
+            guard let self, let button else { return }
+            self.openPanel(level, from: button)
+            self.barView.panel.slider.beginTracking(
+                at: self.sliderX(x, from: button),
+                relative: true,
+                liquidDelay: .milliseconds(Int(LevelPanelView.popDuration * 1000))
+            )
+        }
+        button.onTouchMoved = { [weak self, weak button] x in
+            guard let self, let button else { return }
+            self.barView.panel.slider.continueTracking(at: self.sliderX(x, from: button))
+        }
+        button.onTouchUp = { [weak self] in self?.barView.panel.slider.endTracking() }
     }
 
     private func wirePanel() {
@@ -253,35 +328,45 @@ final class GlintBar: NSObject, NSTouchBarDelegate {
     // MARK: - State → UI
 
     private func refresh() {
-        let row = barView.main
-        row.keyboardButton.isHidden = !Level.keyboard.isAvailable
-        row.displayButton.isHidden = !Level.display.isAvailable
-        row.keyboardButton.setSymbol(Level.keyboard.symbol)
-        row.displayButton.setSymbol(Level.display.symbol)
-        row.volumeButton.setSymbol(Level.volume.symbol)
-        row.muteButton.isActive = AudioController.shared.isMuted
+        if visibleKinds != layoutKinds {
+            applyLayout() // calls back into refresh()
+            return
+        }
+        for level in Level.allCases {
+            let kind: BarItemKind = switch level {
+            case .keyboard: .keyboardBrightness
+            case .display: .displayBrightness
+            case .volume: .volume
+            }
+            (itemViews[kind] as? GlassButton)?.setSymbol(level.symbol)
+        }
+        (itemViews[.mute] as? GlassButton)?.isActive = AudioController.shared.isMuted
 
-        let playSymbol = switch NowPlayingMonitor.shared.isPlaying {
+        let nowPlaying = NowPlayingMonitor.shared
+        let playSymbol = switch nowPlaying.isPlaying {
         case true?: "pause.fill"
         case false?: "play.fill"
         case nil: "playpause.fill"
         }
-        row.playPauseButton.setSymbol(playSymbol)
+        (itemViews[.playPause] as? GlassButton)?.setSymbol(playSymbol)
+        (itemViews[.nowPlaying] as? NowPlayingView)?.update(title: nowPlaying.title, artist: nowPlaying.artist)
+        (itemViews[.clock] as? ClockView)?.update()
 
         if let level = activeLevel {
             barView.panel.slider.setValue(level.value)
         }
     }
 
-    private func updateAppButton(_ app: NSRunningApplication?) {
-        guard let icon = app?.icon else {
-            barView.main.appButton.setSymbol("app.dashed")
+    private func updateAppButton() {
+        guard let button = itemViews[.appControls] as? GlassButton else { return }
+        guard let icon = frontmostApp?.icon else {
+            button.setSymbol("app.dashed")
             return
         }
         let sized = NSImage(size: NSSize(width: 22, height: 22), flipped: false) { rect in
             icon.draw(in: rect)
             return true
         }
-        barView.main.appButton.setImage(sized)
+        button.setImage(sized)
     }
 }

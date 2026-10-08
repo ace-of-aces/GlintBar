@@ -1,0 +1,452 @@
+import SwiftUI
+
+/// Drag-and-drop editor for the Glint bar: a true-to-size replica of the Touch Bar
+/// above a palette of every item. Drag items in, along, or out of the bar.
+struct CustomizeView: View {
+    var onDone: () -> Void = {}
+
+    private let configuration = BarConfiguration.shared
+    @State var drag: DragSession?
+    @State var barFrame = CGRect.zero
+    @State var tileFrames: [BarItemKind: CGRect] = [:]
+    @State private var hovered: BarItem.ID?
+
+    private nonisolated static let space = "customize"
+    private let barSize = CGSize(width: BarMetrics.width, height: BarMetrics.height)
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 0) {
+            header
+                .padding(.bottom, 22)
+            touchBar
+                .padding(.bottom, 10)
+            hint
+                .padding(.bottom, 26)
+            palette
+            Divider()
+                .padding(.vertical, 20)
+            footer
+        }
+        .padding(.horizontal, 30)
+        .padding(.top, 38)
+        .padding(.bottom, 24)
+        .coordinateSpace(.named(Self.space))
+        .overlay(alignment: .topLeading) { ghost }
+        .onChange(of: hardwarePreview) { _, kinds in configuration.previewKinds = kinds }
+        #if DEBUG
+        .onChange(of: CustomizeDebugDriver.shared.generation) { runDebugSteps() }
+        #endif
+    }
+
+    // MARK: - Sections
+
+    private var header: some View {
+        VStack(alignment: .leading, spacing: 4) {
+            Text("Customize Touch Bar")
+                .font(.title2.weight(.semibold))
+            Text("Your Touch Bar updates as you go.")
+                .foregroundStyle(.secondary)
+        }
+    }
+
+    /// The bar as it sits above the keyboard: Esc, then Glint's 1004 pt.
+    private var touchBar: some View {
+        HStack(spacing: 17) {
+            Text("esc")
+                .font(.system(size: 13, weight: .medium))
+                .foregroundStyle(.white.opacity(0.5))
+                .frame(width: 64, height: BarMetrics.height)
+                .background(Color(white: 0.16), in: RoundedRectangle(cornerRadius: 6, style: .continuous))
+            bar
+        }
+        .padding(8)
+        .background(.black, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
+        .overlay {
+            RoundedRectangle(cornerRadius: 12, style: .continuous)
+                .strokeBorder(.white.opacity(dropIsBlocked ? 0 : (isAdding ? 0.35 : 0.08)), lineWidth: 1)
+        }
+        .overlay {
+            RoundedRectangle(cornerRadius: 12, style: .continuous)
+                .strokeBorder(.red.opacity(dropIsBlocked ? 0.7 : 0), lineWidth: 1.5)
+        }
+        .animation(.easeOut(duration: 0.15), value: isAdding)
+        .animation(.easeOut(duration: 0.15), value: dropIsBlocked)
+        .frame(maxWidth: .infinity)
+    }
+
+    private var bar: some View {
+        let entries = displayedEntries
+        return ZStack(alignment: .topLeading) {
+            Color.clear
+            ForEach(entries) { entry in
+                barItem(entry)
+            }
+        }
+        .frame(width: barSize.width, height: barSize.height)
+        .onGeometryChange(for: CGRect.self) { $0.frame(in: .named(Self.space)) } action: { barFrame = $0 }
+        .animation(.spring(duration: 0.32, bounce: 0.15), value: entries.map(\.layoutKey))
+    }
+
+    private func barItem(_ entry: Entry) -> some View {
+        let item = entry.item
+        let showsRemove = hovered == item.id && drag == nil
+        return ItemPreview(kind: item.kind, width: entry.frame.width)
+            .opacity(entry.isHidden ? 0 : (entry.isPlaceholder ? 0.3 : 1))
+            .overlay(alignment: .topLeading) {
+                Button {
+                    remove(item)
+                } label: {
+                    Image(systemName: "minus.circle.fill")
+                        .font(.system(size: 15))
+                        .symbolRenderingMode(.palette)
+                        .foregroundStyle(.white, Color(white: 0.38))
+                        .shadow(radius: 1.5)
+                }
+                .buttonStyle(.plain)
+                .offset(x: -7, y: -8)
+                .opacity(showsRemove ? 1 : 0)
+                .scaleEffect(showsRemove ? 1 : 0.6)
+                .animation(.spring(duration: 0.2), value: showsRemove)
+                .allowsHitTesting(showsRemove)
+            }
+            .contentShape(Rectangle())
+            .onHover { inside in
+                if inside { hovered = item.id } else if hovered == item.id { hovered = nil }
+            }
+            .contextMenu {
+                Button("Remove \(item.kind.title)", systemImage: "minus.circle") { remove(item) }
+            }
+            .gesture(dragGesture(item: item, source: .bar) {
+                CGPoint(x: barFrame.minX + entry.frame.midX, y: barFrame.midY)
+            })
+            .allowsHitTesting(!entry.isPlaceholder)
+            .position(x: entry.frame.midX, y: entry.frame.midY)
+    }
+
+    @ViewBuilder private var hint: some View {
+        Group {
+            if let drag, dropIsBlocked {
+                Label("There’s no room for \(drag.item.kind.title). Remove something first.", systemImage: "exclamationmark.circle")
+                    .foregroundStyle(.red)
+            } else if let drag, drag.source == .bar, !isOverBar(drag) {
+                Label("Release to remove \(drag.item.kind.title).", systemImage: "minus.circle")
+                    .foregroundStyle(.secondary)
+            } else {
+                Text("Drag items into the Touch Bar, drag them along it to rearrange, and drag them out to remove them.")
+                    .foregroundStyle(.secondary)
+            }
+        }
+        .font(.callout)
+        .frame(maxWidth: .infinity)
+        .animation(nil, value: drag?.location)
+    }
+
+    private var palette: some View {
+        Grid(alignment: .topLeading, horizontalSpacing: 56, verticalSpacing: 24) {
+            GridRow {
+                paletteSection(.media)
+                paletteSection(.soundAndLight)
+            }
+            GridRow {
+                paletteSection(.system)
+                paletteSection(.spacing)
+            }
+        }
+    }
+
+    private func paletteSection(_ section: PaletteSection) -> some View {
+        VStack(alignment: .leading, spacing: 10) {
+            Text(section.title)
+                .font(.subheadline.weight(.semibold))
+                .foregroundStyle(.secondary)
+            HStack(alignment: .top, spacing: 14) {
+                ForEach(section.kinds, id: \.self) { kind in
+                    tile(kind)
+                }
+            }
+        }
+    }
+
+    private func tile(_ kind: BarItemKind) -> some View {
+        let isUsed = kind.isUnique && configuration.contains(kind)
+        let isUnavailable = !(kind.level?.isAvailable ?? true)
+        let previewWidth = kind == .flexibleSpace ? 92 : kind.width
+        return VStack(spacing: 7) {
+            ItemPreview(kind: kind, width: previewWidth)
+                .onGeometryChange(for: CGRect.self) { $0.frame(in: .named(Self.space)) } action: { tileFrames[kind] = $0 }
+                .padding(.horizontal, 10)
+                .padding(.vertical, 8)
+                .background(.black, in: RoundedRectangle(cornerRadius: 11, style: .continuous))
+            Text(kind.title)
+                .font(.caption)
+                .foregroundStyle(.secondary)
+                .lineLimit(1)
+                .fixedSize()
+        }
+        .frame(minWidth: 86)
+        .opacity(isUsed || isUnavailable ? 0.38 : 1)
+        .help(isUsed ? "Already in the Touch Bar" : isUnavailable ? "Not available on this Mac right now" : "Drag into the Touch Bar, or click to add it at the end")
+        .contentShape(Rectangle())
+        .onTapGesture { if !isUsed { append(kind) } }
+        .gesture(
+            dragGesture(item: BarItem(kind), source: .palette) {
+                let frame = tileFrames[kind] ?? .zero
+                return CGPoint(x: frame.midX, y: frame.midY)
+            },
+            including: isUsed ? .none : .all
+        )
+    }
+
+    private var footer: some View {
+        HStack {
+            Button("Restore Defaults") {
+                withAnimation(.spring(duration: 0.35)) { configuration.restoreDefaults() }
+            }
+            .disabled(configuration.isDefault)
+            Spacer()
+            Button("Done", action: onDone)
+                .keyboardShortcut(.defaultAction)
+                .buttonStyle(.glassProminent)
+        }
+        .controlSize(.large)
+    }
+
+    /// The item following the pointer while dragging.
+    @ViewBuilder private var ghost: some View {
+        if let drag {
+            let kind = drag.item.kind
+            let removing = drag.source == .bar && !isOverBar(drag)
+            ItemPreview(kind: kind, width: kind == .flexibleSpace ? 92 : kind.width)
+                .padding(6)
+                .background(.black.opacity(0.92), in: RoundedRectangle(cornerRadius: 11, style: .continuous))
+                .overlay(alignment: .topTrailing) {
+                    if let badge = ghostBadge(drag) {
+                        Image(systemName: badge.symbol)
+                            .font(.system(size: 17))
+                            .symbolRenderingMode(.palette)
+                            .foregroundStyle(.white, badge.color)
+                            .offset(x: 7, y: -7)
+                            .transition(.scale.combined(with: .opacity))
+                    }
+                }
+                .scaleEffect(1.08)
+                .opacity(removing ? 0.55 : 1)
+                .shadow(color: .black.opacity(0.35), radius: 12, y: 6)
+                .position(x: drag.location.x - drag.grabOffset.width, y: drag.location.y - drag.grabOffset.height)
+                .allowsHitTesting(false)
+                .animation(.spring(duration: 0.2), value: ghostBadge(drag)?.symbol)
+        }
+    }
+
+    // MARK: - Dragging
+
+    struct DragSession {
+        enum Source { case bar, palette }
+        var item: BarItem
+        var source: Source
+        /// Pointer location in the window's coordinate space.
+        var location: CGPoint
+        /// Pointer offset from the item's centre, so the item doesn't jump under it.
+        var grabOffset: CGSize
+    }
+
+    private func dragGesture(item: BarItem, source: DragSession.Source, center: @escaping () -> CGPoint) -> some Gesture {
+        DragGesture(minimumDistance: 3, coordinateSpace: .named(Self.space))
+            .onChanged { value in
+                if drag == nil {
+                    let origin = center()
+                    hovered = nil
+                    drag = DragSession(
+                        item: item,
+                        source: source,
+                        location: value.location,
+                        grabOffset: CGSize(width: value.startLocation.x - origin.x, height: value.startLocation.y - origin.y)
+                    )
+                } else {
+                    drag?.location = value.location
+                }
+            }
+            .onEnded { _ in finishDrag() }
+    }
+
+    func finishDrag() {
+        guard let drag else { return }
+        withAnimation(.spring(duration: 0.32, bounce: 0.15)) {
+            if let index = insertionIndex(for: drag) {
+                var items = baseItems(for: drag)
+                items.insert(drag.item, at: index)
+                configuration.setItems(items)
+            } else if drag.source == .bar, !isOverBar(drag) {
+                configuration.remove(drag.item.id)
+            }
+            self.drag = nil
+        }
+        configuration.previewKinds = nil
+    }
+
+    /// The bar's hit area for drops; generous vertically so it's easy to aim for.
+    private func isOverBar(_ drag: DragSession) -> Bool {
+        barFrame.insetBy(dx: -16, dy: -40).contains(drag.location)
+    }
+
+    /// The bar's items without the one being dragged.
+    private func baseItems(for drag: DragSession) -> [BarItem] {
+        configuration.items.filter { $0.id != drag.item.id }
+    }
+
+    /// Where the dragged item would land, or nil if it's off the bar or doesn't fit.
+    private func insertionIndex(for drag: DragSession) -> Int? {
+        guard isOverBar(drag) else { return nil }
+        let base = baseItems(for: drag)
+        guard BarLayout.fits(base.map(\.kind) + [drag.item.kind], in: barSize.width) else { return nil }
+        let centerX = drag.location.x - drag.grabOffset.width - barFrame.minX
+        let frames = BarLayout.frames(for: base.map(\.kind), in: barSize)
+        return frames.firstIndex { $0.midX > centerX } ?? base.count
+    }
+
+    private var isAdding: Bool {
+        guard let drag else { return false }
+        return insertionIndex(for: drag) != nil
+    }
+
+    private var dropIsBlocked: Bool {
+        guard let drag else { return false }
+        return isOverBar(drag) && insertionIndex(for: drag) == nil
+    }
+
+    private func ghostBadge(_ drag: DragSession) -> (symbol: String, color: Color)? {
+        if dropIsBlocked { return ("nosign", .red) }
+        if drag.source == .bar, !isOverBar(drag) { return ("minus.circle.fill", Color(white: 0.38)) }
+        if drag.source == .palette, isAdding { return ("plus.circle.fill", .green) }
+        return nil
+    }
+
+    // MARK: - Displayed bar
+
+    struct Entry: Identifiable {
+        let item: BarItem
+        var frame: CGRect
+        var isPlaceholder = false
+        /// The dragged item while it's off the bar: kept (invisibly) so its view and
+        /// gesture survive.
+        var isHidden = false
+        var id: BarItem.ID { item.id }
+        var layoutKey: String { "\(item.id)\(frame.minX)\(frame.width)" }
+    }
+
+    /// The bar as it would look if the current drag ended now.
+    var displayedEntries: [Entry] {
+        var entries = configuration.items.map { Entry(item: $0, frame: .zero) }
+        if let drag {
+            let original = entries.firstIndex { $0.id == drag.item.id }
+            entries.removeAll { $0.id == drag.item.id }
+            if let index = insertionIndex(for: drag) {
+                entries.insert(Entry(item: drag.item, frame: .zero, isPlaceholder: true), at: index)
+            } else if let original {
+                entries.insert(Entry(item: drag.item, frame: .zero, isHidden: true), at: original)
+            }
+        }
+        let visible = entries.filter { !$0.isHidden }
+        let frames = BarLayout.frames(for: visible.map(\.item.kind), in: barSize)
+        var x: CGFloat = 0
+        var next = frames.makeIterator()
+        for index in entries.indices {
+            if entries[index].isHidden {
+                entries[index].frame = CGRect(x: x, y: 0, width: 0, height: barSize.height)
+            } else if let frame = next.next() {
+                entries[index].frame = frame
+                x = frame.maxX
+            }
+        }
+        return entries
+    }
+
+    /// What the real Touch Bar shows during a drag: the would-be result.
+    private var hardwarePreview: [BarItemKind]? {
+        guard drag != nil else { return nil }
+        return displayedEntries.filter { !$0.isHidden }.map(\.item.kind)
+    }
+
+    // MARK: - Editing
+
+    private func remove(_ item: BarItem) {
+        withAnimation(.spring(duration: 0.32, bounce: 0.15)) {
+            configuration.remove(item.id)
+            hovered = nil
+        }
+    }
+
+    private func append(_ kind: BarItemKind) {
+        guard configuration.canAdd(kind, width: barSize.width) else {
+            NSSound.beep()
+            return
+        }
+        withAnimation(.spring(duration: 0.32, bounce: 0.15)) {
+            configuration.setItems(configuration.items + [BarItem(kind)])
+        }
+    }
+}
+
+private struct PaletteSection {
+    let title: String
+    let kinds: [BarItemKind]
+
+    static let media = PaletteSection(title: "Media", kinds: [.previousTrack, .playPause, .nextTrack, .nowPlaying])
+    static let soundAndLight = PaletteSection(title: "Sound & Light", kinds: [.keyboardBrightness, .displayBrightness, .volume, .mute])
+    static let system = PaletteSection(title: "System", kinds: [.appControls, .missionControl, .apps, .screenshot, .lockScreen, .clock])
+    static let spacing = PaletteSection(title: "Spacing", kinds: [.space, .flexibleSpace])
+}
+
+#if DEBUG
+/// Drives `CustomizeView`'s drag logic from debug commands (see `GlintBar.debug`),
+/// so drag and drop can be exercised and snapshotted without a mouse.
+@MainActor
+@Observable
+final class CustomizeDebugDriver {
+    enum Step {
+        case pickUpBarItem(index: Int)
+        case pickUpPaletteItem(BarItemKind)
+        /// x in bar coordinates.
+        case moveOverBar(x: CGFloat)
+        case moveOffBar
+        case drop
+    }
+
+    static let shared = CustomizeDebugDriver()
+    private(set) var pending: [Step] = []
+    private(set) var generation = 0
+
+    func perform(_ step: Step) {
+        pending.append(step)
+        generation += 1
+    }
+
+    func takeSteps() -> [Step] {
+        defer { pending = [] }
+        return pending
+    }
+}
+
+extension CustomizeView {
+    func runDebugSteps() {
+        for step in CustomizeDebugDriver.shared.takeSteps() {
+            switch step {
+            case .pickUpBarItem(let index):
+                let entries = displayedEntries
+                guard entries.indices.contains(index) else { continue }
+                let center = CGPoint(x: barFrame.minX + entries[index].frame.midX, y: barFrame.midY)
+                drag = DragSession(item: entries[index].item, source: .bar, location: center, grabOffset: .zero)
+            case .pickUpPaletteItem(let kind):
+                let frame = tileFrames[kind] ?? .zero
+                drag = DragSession(item: BarItem(kind), source: .palette, location: CGPoint(x: frame.midX, y: frame.midY), grabOffset: .zero)
+            case .moveOverBar(let x):
+                drag?.location = CGPoint(x: barFrame.minX + x, y: barFrame.midY)
+            case .moveOffBar:
+                drag?.location = CGPoint(x: barFrame.midX, y: barFrame.maxY + 160)
+            case .drop:
+                finishDrag()
+            }
+        }
+    }
+}
+#endif

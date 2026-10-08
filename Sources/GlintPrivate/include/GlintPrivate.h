@@ -50,4 +50,9 @@ typedef NS_ENUM(NSInteger, GLMediaCommand) {
 BOOL GLMediaSendCommand(GLMediaCommand command);
 // Playback *state* can't be read from here; see Sources/GlintNowPlaying.
 
+// MARK: - Session (login)
+
+/// Locks the screen right away, like the Lock Screen menu item.
+BOOL GLLockScreen(void);
+
 NS_ASSUME_NONNULL_END

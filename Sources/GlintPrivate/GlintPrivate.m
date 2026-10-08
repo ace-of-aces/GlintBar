@@ -151,3 +151,12 @@ BOOL GLMediaSendCommand(GLMediaCommand command) {
     Boolean (*fn)(int, CFDictionaryRef) = GLSymbol(kMediaRemote, "MRMediaRemoteSendCommand");
     return fn ? fn((int)command, NULL) : NO;
 }
+
+// MARK: - Session
+
+BOOL GLLockScreen(void) {
+    void (*fn)(void) = GLSymbol(PRIVATE_FW("login"), "SACLockScreenImmediate");
+    if (!fn) return NO;
+    fn();
+    return YES;
+}
