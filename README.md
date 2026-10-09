@@ -1,103 +1,91 @@
-# GlintBar
+<p align="center">
+  <img src="Design/Icons/app.svg" width="128" alt="GlintBar icon">
+</p>
 
-A Liquid Glass replacement for the Touch Bar's Control Strip on macOS 26+.
+<h1 align="center">GlintBar</h1>
 
-macOS 27's own Touch Bar UI is in rough shape: volume and brightness popovers hang
-instead of closing, and none of it got the Liquid Glass treatment. GlintBar takes over
-the Touch Bar system-wide with its own controls, built on real `NSGlassEffectView`s.
+<p align="center">
+  A Liquid Glass Touch Bar for macOS 26 and later.
+</p>
 
-## What it does
+---
 
-- **Full-width GlintBar** over every app: frontmost-app button, media controls
-  (previous / play-pause / next), keyboard backlight, display brightness, volume,
-  mute and screenshot.
-- **Sliders that pop out of their button**, like the native Control Strip: touch the
-  keyboard, brightness or volume button and a fixed-size slider grows out of it
-  straight away, with the same touch dragging the knob (relative to where it is, so
-  the level never jumps). The knob is solid at rest and turns into a clear glass lens
-  while dragged.
-- When the finger lifts, an ✕ appears in the button's slot and the slider **closes
-  itself** half a second later (configurable from the menu bar).
-- **Play/pause shows the real playback state** (see below).
-- **Now Playing** shows the track with a blue progress line. Tap it to play or pause;
-  press and slide (or press and hold) to pop out a scrubber with elapsed and remaining
-  time. The song jumps to the new position when you let go.
-- **App controls**: tap the app icon on the left to hand the Touch Bar back to the
-  frontmost app's own controls. GlintBar's button in Apple's Control Strip (the eclipsed bar)
-  brings GlintBar back; it glints once when you switch, so it's easy to find.
-- **Customizable**: choose **Customize GlintBar…** from GlintBar's menu bar item (or open GlintBar.app
-  again) to drag items into the bar, along it and out of it. The Touch Bar follows along
-  live. Besides the defaults there are Now Playing, Clock, Battery, System Resources (CPU,
-  GPU, RAM and storage), Spotlight, Mission
-  Control, Apps, Show Desktop, Input Sources, Quick Actions, Night Shift, step buttons for
-  volume, brightness and keyboard backlight (hold to repeat), Screen Saver, Lock Screen
-  and Sleep, plus spaces and flexible spaces. **App** buttons launch an app of your choice
-  and show its icon: click the App tile (or drag it into the bar) to pick apps, or drop
-  apps from Finder onto the bar. Right-click or double-click one to change its app.
-- Menu bar item for switching modes, customizing, the auto-close delay and launch at login.
+macOS's own Touch Bar has been left behind: volume and brightness popovers hang instead of
+closing, and none of it got the Liquid Glass look. GlintBar replaces the Control Strip in every
+app with a glassy bar of its own that you can arrange however you like.
 
-## Build & run
+## Features
 
-Requires Xcode 26+ and a Mac with a Touch Bar (13" M1/M2 MacBook Pro on macOS 27).
+### A better Control Strip
+
+Out of the box, GlintBar gives you the controls you reach for most:
+
+- **Media**: previous, play/pause and next. Play/pause always shows whether something is
+  actually playing.
+- **Levels**: keyboard backlight, display brightness and volume, plus mute.
+- **Shortcuts**: screenshot and Siri.
+- **App controls**: tap the app icon on the left to hand the Touch Bar back to the current app.
+  GlintBar's button in Apple's Control Strip brings it back, with a little glint so it's easy
+  to spot.
+
+### Sliders that feel right
+
+Touch the brightness, backlight or volume button and a slider grows straight out of it. Keep
+your finger down and drag: the level follows from where it is, so it never jumps. Let go and
+the slider closes on its own after a moment.
+
+### Now Playing
+
+See the current track at a glance, with a progress line underneath. Tap to play or pause, or
+press and slide to scrub through the song with elapsed and remaining time.
+
+### Make it yours
+
+Choose **Customize GlintBar** from the menu bar (or just open GlintBar.app again) and drag items into, along and out of the bar.
+The Touch Bar updates live as you go.
+
+|             | Available items                                                                                              |
+| ----------- | ------------------------------------------------------------------------------------------------------------ |
+| **Media**   | Previous, Play/Pause, Next, Now Playing                                                                      |
+| **Levels**  | Volume, Brightness and Keyboard Backlight sliders, step buttons for each (hold to repeat), Mute, Night Shift |
+| **Info**    | Clock, Battery, System Resources (CPU, GPU, memory and storage)                                              |
+| **System**  | Spotlight, Siri, Mission Control, Apps, Show Desktop, Input Sources, Quick Actions, Screenshot               |
+| **Session** | Screen Saver, Lock Screen, Sleep                                                                             |
+| **Apps**    | Buttons that launch any app you pick. Drop apps from Finder onto the bar, or right-click one to change it    |
+| **Layout**  | Spaces and flexible spaces                                                                                   |
+
+### Menu bar
+
+GlintBar's menu bar item lets you switch between GlintBar and app controls, open the
+customization window, choose how quickly sliders close, and turn on launch at login.
+
+## Requirements
+
+- A MacBook Pro with a Touch Bar
+- macOS 26 or later
+- Xcode 26 or later, to build it
+
+## Installation
+
+Currently, GlintBar must be built from source. Clone the repository, then run:
 
 ```bash
-./scripts/build-app.sh            # builds build/GlintBar.app
-./scripts/build-app.sh --install  # also copies it to ~/Applications and launches it
+./scripts/build-app.sh --install
 ```
 
-For development, `swift build && .build/debug/GlintBar` runs it without a bundle
-(launch at login is only available from the `.app`).
+This builds `GlintBar.app`, copies it to `~/Applications` and launches it. Run the same
+command again to update. To only build the app (into `build/GlintBar.app`) without
+installing it, leave off `--install`.
 
-The icon artwork lives in [`Design/Icons`](Design/Icons) and is generated by
-`node Design/Icons/make-icons.mjs`. After changing `app.svg`, run
-`./scripts/make-app-icon.sh` to rebuild `Resources/AppIcon.icns`. The menu bar and Control
-Strip glyphs are drawn in code from the same geometry
-([`EclipseGlyph`](Sources/GlintBar/Icons/EclipseGlyph.swift)).
+To start GlintBar automatically, choose **Launch at Login** from its menu bar item.
 
-Debug builds accept commands over a distributed notification, which makes it possible
-to drive the bar without touching it and capture it with `screencapture -b`:
+## Good to know
 
-```bash
-osascript -l JavaScript -e 'ObjC.import("Foundation"); $.NSDistributedNotificationCenter.defaultCenter.postNotificationNameObjectUserInfoDeliverImmediately("center.julian.GlintBar.debug", "slider:volume", $(), true)'
-```
+GlintBar relies on private macOS APIs to control the Touch Bar, brightness and media. That
+means it can't be distributed through the Mac App Store, and a macOS update may break some or
+all of it.
 
-Commands simulate a finger on a level button (x positions in bar points):
-`down:volume` (or `down:volume:850`), `move:700`, `up`, `tap:display`; plus `close`,
-`appControls` and `glint`; `scrub:down`, `scrub:move:<x>`, `scrub:up` for Now Playing;
-`press:<item>` taps any button item (e.g. `press:volumeUp`); `battery:<percent>` (optionally
-`:charging` or `:power`) fakes the battery for screenshots, `battery:real` undoes it.
-For the customization window: `customize`,
-`snapshot:<png path>`, and drags with `cdrag:bar:<index>` or `cdrag:palette:<item>` (`app` for the App tile),
-then `cdrag:to:<x>` or `cdrag:off`, then `cdrag:drop`.
+## For developers
 
-## How it works
-
-GlintBar uses private frameworks, all resolved at runtime in
-[`Sources/GlintBarPrivate`](Sources/GlintBarPrivate) so a missing symbol disables a feature
-instead of crashing:
-
-| Feature | API |
-| --- | --- |
-| System-wide bar, Control Strip button | `NSTouchBar presentSystemModalTouchBar:…`, `DFRElementSetControlStripPresenceForIdentifier` (DFRFoundation) |
-| Display brightness | `DisplayServicesGetBrightness` / `SetBrightness` (DisplayServices) |
-| Keyboard backlight | `KeyboardBrightnessClient` (CoreBrightness) |
-| Night Shift | `CBBlueLightClient` (CoreBrightness) |
-| Show Desktop | `CoreDockSendNotification` (HIServices) |
-| Spotlight, Quick Actions | The distributed notifications Apple's Control Strip posts |
-| Media commands | `MRMediaRemoteSendCommand` (MediaRemote) |
-| Playback state, seeking | MediaRemote, from inside `/usr/bin/perl` ([`GlintBarNowPlaying`](Sources/GlintBarNowPlaying)) |
-| Volume / mute | CoreAudio (public) |
-| Battery | IOKit power sources (public) |
-| System Resources | Mach host statistics, the GPU's IOKit `PerformanceStatistics`, volume capacity (all public) |
-
-Since macOS 15.4 MediaRemote tells third-party processes that nothing is playing.
-`NowPlayingMonitor` therefore loads the small `libGlintBarNowPlaying.dylib` into the
-Apple-signed `/usr/bin/perl`, which may still ask, and reads its state changes as JSON
-lines. Seek requests go the other way, as lines on the helper's stdin. The helper exits
-when GlintBar's end of that pipe closes.
-
-The whole bar is a single Touch Bar item ([`BarView`](Sources/GlintBar/TouchBar/BarView.swift)),
-so GlintBar controls layout and the transitions between the main row and the level panel.
-
-Because of the private APIs GlintBar can't ship on the Mac App Store, and a macOS update
-can break it.
+How GlintBar works, how the project is laid out and how to debug it is covered in the
+[technical documentation](docs/README.md).
