@@ -36,17 +36,27 @@ enum Level: CaseIterable {
         }
     }
 
-    var symbol: String {
+    /// The bar item showing this level as a slider.
+    var kind: BarItemKind {
+        switch self {
+        case .keyboard: .keyboardBrightness
+        case .display: .displayBrightness
+        case .volume: .volume
+        }
+    }
+
+    /// The button's icon at `value`. Takes the value rather than reading it, since reading
+    /// asks another process.
+    func symbol(for value: Float) -> String {
         switch self {
         case .keyboard:
             return value < 0.01 ? "light.min" : "light.max"
         case .display:
             return value < 0.35 ? "sun.min.fill" : "sun.max.fill"
         case .volume:
-            let v = value
-            if v == 0 { return "speaker.slash.fill" }
-            if v < 0.34 { return "speaker.wave.1.fill" }
-            if v < 0.67 { return "speaker.wave.2.fill" }
+            if value == 0 { return "speaker.slash.fill" }
+            if value < 0.34 { return "speaker.wave.1.fill" }
+            if value < 0.67 { return "speaker.wave.2.fill" }
             return "speaker.wave.3.fill"
         }
     }
@@ -80,8 +90,15 @@ enum Level: CaseIterable {
 
 @MainActor
 enum DisplayBrightness {
-    /// The internal panel, or nil in clamshell mode.
-    static var builtInDisplay: CGDirectDisplayID? {
+    /// The internal panel, or nil in clamshell mode. Finding it asks the window server, so
+    /// it's kept; `updateBuiltInDisplay()` looks again.
+    private(set) static var builtInDisplay = findBuiltInDisplay()
+
+    static func updateBuiltInDisplay() {
+        builtInDisplay = findBuiltInDisplay()
+    }
+
+    private static func findBuiltInDisplay() -> CGDirectDisplayID? {
         var count: UInt32 = 0
         guard CGGetOnlineDisplayList(0, nil, &count) == .success, count > 0 else { return nil }
         var displays = [CGDirectDisplayID](repeating: 0, count: Int(count))

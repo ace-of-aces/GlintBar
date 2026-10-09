@@ -94,8 +94,7 @@ final class TrayGlyphView: NSView {
 
     override func touchesEnded(with event: NSEvent) {
         setPressed(false)
-        let x = event.touches(matching: .ended, in: self).first?.location(in: self).x ?? bounds.midX
-        if x > -12, x < bounds.width + 12 { onTap?() }
+        if touchEndedInside(event, fallbackX: bounds.midX) { onTap?() }
     }
 
     override func touchesCancelled(with event: NSEvent) {

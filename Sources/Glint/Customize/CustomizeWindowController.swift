@@ -16,18 +16,23 @@ final class CustomizeWindowController: NSWindowController, NSWindowDelegate {
         window.isReleasedWhenClosed = false
         super.init(window: window)
         window.delegate = self
-
-        let hosting = NSHostingController(rootView: CustomizeView { [weak self] in self?.close() })
-        hosting.sizingOptions = .preferredContentSize
-        window.contentViewController = hosting
     }
 
     @available(*, unavailable)
     required init?(coder: NSCoder) { fatalError() }
 
+    /// The palette's previews show live CPU, GPU, memory and storage figures.
+    private static let resourcesClient = "customize"
+
     func show() {
         guard let window else { return }
         if !window.isVisible {
+            if window.contentViewController == nil {
+                let hosting = NSHostingController(rootView: CustomizeView { [weak self] in self?.close() })
+                hosting.sizingOptions = .preferredContentSize
+                window.contentViewController = hosting
+            }
+            SystemResources.shared.setNeeded(true, by: Self.resourcesClient)
             // Size to the SwiftUI content before centring: centring the still zero-sized
             // window would put its corner, not its middle, at the centre of the screen.
             if let content = window.contentViewController?.view {
@@ -75,5 +80,13 @@ final class CustomizeWindowController: NSWindowController, NSWindowDelegate {
 
     func windowWillClose(_ notification: Notification) {
         BarConfiguration.shared.previewKinds = nil
+        SystemResources.shared.setNeeded(false, by: Self.resourcesClient)
+        // A closed window's SwiftUI views keep updating with what they observe (the meters
+        // every two seconds), so they go once it has closed (the close may come from a
+        // button among them) and come back with the window.
+        DispatchQueue.main.async { [weak self] in
+            guard let window = self?.window, !window.isVisible else { return }
+            window.contentViewController = nil
+        }
     }
 }

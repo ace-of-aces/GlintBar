@@ -10,8 +10,8 @@ import Observation
 final class SystemResources {
     static let shared = SystemResources()
 
-    /// Each value is 0–1, or nil until known (CPU needs two samples).
-    struct Usage: Equatable {
+    /// Each value is 0–1, or nil until known.
+    struct Usage: Equatable, Sendable {
         var cpu: Double?
         var gpu: Double?
         var memory: Double?
@@ -24,8 +24,8 @@ final class SystemResources {
 
     @ObservationIgnored private var clients: Set<AnyHashable> = []
     @ObservationIgnored private var timer: Timer?
-    @ObservationIgnored private var lastCPUTicks: [UInt64]?
-    @ObservationIgnored private let host = mach_host_self()
+    @ObservationIgnored private let sampler = Sampler()
+    @ObservationIgnored private var isSampling = false
 
     private static let interval: TimeInterval = 2
 
@@ -37,25 +37,61 @@ final class SystemResources {
         if clients.isEmpty {
             timer?.invalidate()
             timer = nil
-            lastCPUTicks = nil
         } else if timer == nil {
-            sample()
             timer = Timer.scheduledTimer(withTimeInterval: Self.interval, repeats: true) { [weak self] _ in
                 MainActor.assumeIsolated { self?.sample() }
             }
+            timer?.tolerance = Self.interval / 10
+            sample()
         }
     }
 
     private func sample() {
-        let new = Usage(cpu: cpuUsage(), gpu: Self.gpuUsage(), memory: memoryUsage(), storage: Self.storageUsage())
-        guard new != usage else { return }
-        usage = new
-        onChange?()
+        guard !isSampling else { return } // the last reading is still being taken
+        isSampling = true
+        sampler.read(cpuBaselineMaxAge: 2 * Self.interval) { [weak self] new in
+            guard let self else { return }
+            self.isSampling = false
+            // Dropped if sampling stopped in the meantime.
+            guard self.timer != nil, new != self.usage else { return }
+            self.usage = new
+            self.onChange?()
+        }
+    }
+}
+
+/// Takes the readings on a queue of its own: asking how much storage is free (purgeable
+/// space included) alone takes several milliseconds, too long for the main thread.
+private final class Sampler: @unchecked Sendable {
+    private let queue = DispatchQueue(label: "center.julian.glint.resources", qos: .utility)
+    private let host = mach_host_self()
+    // Only touched on `queue`.
+    private var lastCPUTicks: [UInt64]?
+    private var lastCPUTicksTime = DispatchTime(uptimeNanoseconds: 0)
+
+    /// Reads everything and hands it to `deliver` on the main thread. CPU usage is the busy
+    /// share since the previous reading; if that is older than `cpuBaselineMaxAge` (the
+    /// first reading, or sampling was paused) it is measured over a short window instead,
+    /// so the figure is current.
+    func read(cpuBaselineMaxAge: TimeInterval, then deliver: @escaping @MainActor @Sendable (SystemResources.Usage) -> Void) {
+        queue.async { [self] in
+            let finish: @Sendable () -> Void = { [self] in
+                let usage = SystemResources.Usage(cpu: cpuUsage(), gpu: Self.gpuUsage(), memory: memoryUsage(), storage: Self.storageUsage())
+                DispatchQueue.main.async { MainActor.assumeIsolated { deliver(usage) } }
+            }
+            let baselineAge = Double(DispatchTime.now().uptimeNanoseconds - lastCPUTicksTime.uptimeNanoseconds) / 1e9
+            if lastCPUTicks == nil || baselineAge > cpuBaselineMaxAge {
+                _ = cpuUsage()
+                queue.asyncAfter(deadline: .now() + 0.25, execute: finish)
+            } else {
+                finish()
+            }
+        }
     }
 
     // MARK: - Readings
 
-    /// Busy share of all CPU time since the previous sample.
+    /// Busy share of all CPU time since the previous call.
     private func cpuUsage() -> Double? {
         var info = host_cpu_load_info()
         var count = mach_msg_type_number_t(MemoryLayout<host_cpu_load_info_data_t>.stride / MemoryLayout<integer_t>.stride)
@@ -66,7 +102,10 @@ final class SystemResources {
         }
         guard result == KERN_SUCCESS else { return nil }
         let ticks = [info.cpu_ticks.0, info.cpu_ticks.1, info.cpu_ticks.2, info.cpu_ticks.3].map(UInt64.init)
-        defer { lastCPUTicks = ticks }
+        defer {
+            lastCPUTicks = ticks
+            lastCPUTicksTime = .now()
+        }
         guard let last = lastCPUTicks else { return nil }
         // The counters are 32-bit and wrap; &- keeps the difference right across a wrap.
         let delta = zip(ticks, last).map { UInt64(UInt32(truncatingIfNeeded: $0) &- UInt32(truncatingIfNeeded: $1)) }

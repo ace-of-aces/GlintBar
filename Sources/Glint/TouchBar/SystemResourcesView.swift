@@ -83,6 +83,8 @@ private final class MeterView: NSView {
     private let track = CALayer()
     private let fill = CALayer()
     private var fraction: CGFloat = 0
+    /// The digits shown ("42", or "–" while unknown).
+    private var digits: String?
 
     /// The text row's baseline and the bar, measured from the bottom.
     private static let baseline: CGFloat = 14.5
@@ -122,17 +124,19 @@ private final class MeterView: NSView {
     }
 
     func show(_ newValue: Double?) {
-        let text = NSMutableAttributedString()
-        if let newValue {
-            text.append(NSAttributedString(string: "\(Int((newValue * 100).rounded()))", attributes: [.font: ResourceMeter.valueFont]))
-            text.append(NSAttributedString(string: "%", attributes: [.font: ResourceMeter.percentFont]))
-        } else {
-            text.append(NSAttributedString(string: "–", attributes: [.font: ResourceMeter.valueFont]))
+        // Storage and memory rarely move by a whole percent between samples.
+        let newDigits = newValue.map { "\(Int(($0 * 100).rounded()))" } ?? "–"
+        if newDigits != digits {
+            digits = newDigits
+            let text = NSMutableAttributedString(string: newDigits, attributes: [.font: ResourceMeter.valueFont])
+            if newValue != nil {
+                text.append(NSAttributedString(string: "%", attributes: [.font: ResourceMeter.percentFont]))
+            }
+            text.addAttribute(.foregroundColor, value: NSColor.white, range: NSRange(location: 0, length: text.length))
+            value.attributedStringValue = text
+            needsLayout = true
         }
-        text.addAttribute(.foregroundColor, value: NSColor.white, range: NSRange(location: 0, length: text.length))
-        value.attributedStringValue = text
         fraction = CGFloat(min(max(newValue ?? 0, 0), 1))
-        needsLayout = true
         layoutFill(animated: true)
     }
 

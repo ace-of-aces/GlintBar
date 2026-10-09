@@ -9,6 +9,16 @@ final class GlintBar: NSObject, NSTouchBarDelegate {
     private(set) var state: State = .glint
     var onStateChange: (() -> Void)?
 
+    /// False while the screens sleep or another user's session is in front. Nobody can see
+    /// the bar then, so nothing on it is kept up to date.
+    var isDisplayActive = true {
+        didSet {
+            guard isDisplayActive != oldValue else { return }
+            if isDisplayActive { catchUp() }
+            updateActivity()
+        }
+    }
+
     private static let barItemID = NSTouchBarItem.Identifier("center.julian.glint.bar")
     private static let trayItemID = NSTouchBarItem.Identifier("center.julian.glint.tray")
 
@@ -17,9 +27,15 @@ final class GlintBar: NSObject, NSTouchBarDelegate {
     private let trayItem = NSCustomTouchBarItem(identifier: GlintBar.trayItemID)
     private let trayGlyph = TrayGlyphView()
 
+    private var isStarted = false
+    /// Picks up what has no change notification (brightness, Night Shift, the clock,
+    /// items coming and going) while the bar can be seen.
     private var pollTimer: Timer?
-    /// One view per item kind in use (spacers have none), created on demand.
+    /// Moves the Now Playing line along while something plays.
+    private var progressTimer: Timer?
+    /// The views of the items on the bar (spacers have none).
     private var itemViews: [BarItemKind: NSView] = [:]
+    private var layoutKinds: [BarItemKind] = []
     private var frontmostApp: NSRunningApplication?
 
     // Slider panel state.
@@ -27,11 +43,31 @@ final class GlintBar: NSObject, NSTouchBarDelegate {
         case level(Level)
         /// Scrubbing through the current track.
         case media
+
+        /// The item the panel pops out of.
+        @MainActor var anchor: BarItemKind {
+            switch self {
+            case .level(let level): level.kind
+            case .media: .nowPlaying
+            }
+        }
     }
-    private var activePanel: PanelContent?
-    private var progressTimer: Timer?
-    /// When the open panel closes itself; nil while a finger is on it.
-    private var closeDeadline: Date?
+    private enum PanelState {
+        case closed
+        /// A finger is on the slider, or on the item it popped out of.
+        case held(PanelContent)
+        /// The finger lifted: the ✕ shows until the panel closes itself.
+        case lingering(PanelContent)
+
+        var content: PanelContent? {
+            switch self {
+            case .closed: nil
+            case .held(let content), .lingering(let content): content
+            }
+        }
+    }
+    private var panelState = PanelState.closed
+    /// Closes a lingering panel, or watches a held one for a lost touch.
     private var panelTimer: Timer?
     /// A drag that hasn't reported anything for this long is treated as lost
     /// (its touch-up never arrived), so the panel can't get stuck open.
@@ -47,9 +83,9 @@ final class GlintBar: NSObject, NSTouchBarDelegate {
         trayItem.view = trayGlyph
 
         wirePanel()
-        AudioController.shared.onChange = { [weak self] in self?.refresh() }
-        NowPlayingMonitor.shared.onChange = { [weak self] in self?.refresh() }
-        Battery.shared.onChange = { [weak self] in self?.refresh() }
+        AudioController.shared.onChange = { [weak self] in self?.audioChanged() }
+        NowPlayingMonitor.shared.onChange = { [weak self] in self?.nowPlayingChanged() }
+        Battery.shared.onChange = { [weak self] in self?.batteryChanged() }
         SystemResources.shared.onChange = { [weak self] in
             (self?.itemViews[.systemResources] as? SystemResourcesView)?.update(SystemResources.shared.usage)
         }
@@ -64,20 +100,13 @@ final class GlintBar: NSObject, NSTouchBarDelegate {
         TouchBarPrivate.addTrayItem(trayItem)
         NowPlayingMonitor.shared.start()
         Battery.shared.start()
+        isStarted = true
         showGlint()
-        pollTimer = Timer.scheduledTimer(withTimeInterval: 1.5, repeats: true) { [weak self] _ in
-            // Brightness has no change notification we can use.
-            MainActor.assumeIsolated { self?.refresh() }
-        }
-        progressTimer = Timer.scheduledTimer(withTimeInterval: 0.5, repeats: true) { [weak self] _ in
-            // Playback position moves continuously; only the media views need it.
-            MainActor.assumeIsolated { self?.updatePlaybackProgress() }
-        }
     }
 
     func stop() {
-        pollTimer?.invalidate()
-        progressTimer?.invalidate()
+        isStarted = false
+        updateActivity()
         NowPlayingMonitor.shared.stop()
         Battery.shared.stop()
         TouchBarPrivate.dismiss(touchBar)
@@ -86,8 +115,9 @@ final class GlintBar: NSObject, NSTouchBarDelegate {
 
     func showGlint() {
         state = .glint
-        refresh()
+        catchUp()
         TouchBarPrivate.present(touchBar, placement: .fullWidth, trayItem: Self.trayItemID)
+        updateActivity()
         onStateChange?()
     }
 
@@ -96,6 +126,7 @@ final class GlintBar: NSObject, NSTouchBarDelegate {
     func showAppControls() {
         closePanel(animated: false)
         state = .appControls
+        updateActivity()
         TouchBarPrivate.minimize(touchBar)
         // The Control Strip forgets the tray item after a full-width bar; put it back.
         TouchBarPrivate.addTrayItem(trayItem)
@@ -116,7 +147,7 @@ final class GlintBar: NSObject, NSTouchBarDelegate {
 
     func frontmostAppChanged(_ app: NSRunningApplication?) {
         frontmostApp = app
-        updateAppButton()
+        if let button = itemViews[.appControls] as? GlassButton { showFrontmostApp(on: button) }
     }
 
     func touchBar(_ touchBar: NSTouchBar, makeItemForIdentifier identifier: NSTouchBarItem.Identifier) -> NSTouchBarItem? {
@@ -135,12 +166,8 @@ final class GlintBar: NSObject, NSTouchBarDelegate {
     func debug(_ command: String) {
         let parts = command.split(separator: ":").map(String.init)
         func button(for name: String) -> GlassButton {
-            let kind: BarItemKind = switch name {
-            case "keyboard": .keyboardBrightness
-            case "display": .displayBrightness
-            default: .volume
-            }
-            return itemViews[kind] as? GlassButton ?? GlassButton(symbol: "questionmark")
+            let level = Level.allCases.first { "\($0)" == name } ?? .volume
+            return itemViews[level.kind] as? GlassButton ?? GlassButton(symbol: "questionmark")
         }
         func local(_ barX: String?, in button: GlassButton) -> CGFloat {
             guard let barX, let x = Double(barX) else { return button.bounds.midX }
@@ -168,7 +195,7 @@ final class GlintBar: NSObject, NSTouchBarDelegate {
             }
         case "press":
             guard parts.count > 1, let kind = BarItemKind(rawValue: parts[1]) else { return }
-            (itemView(for: kind) as? GlassButton)?.onTap?()
+            ((itemViews[kind] ?? makeItemView(kind)) as? GlassButton)?.onTap?()
         case "battery":
             // battery:<percent>[:charging|:power] fakes the battery; battery:real undoes it.
             let percent = parts.count > 1 ? Int(parts[1]) : nil
@@ -196,7 +223,53 @@ final class GlintBar: NSObject, NSTouchBarDelegate {
     }
     #endif
 
-    // MARK: - Wiring
+    // MARK: - Doing only what can be seen
+
+    private var isVisible: Bool { isStarted && state == .glint && isDisplayActive }
+
+    /// Starts or stops the timers and sampling that only matter while the bar can be seen.
+    private func updateActivity() {
+        let visible = isVisible
+        SystemResources.shared.setNeeded(visible && layoutKinds.contains(.systemResources), by: "bar")
+        setTimer(&pollTimer, running: visible, interval: 1.5) { $0.poll() }
+        // A paused track's position doesn't move.
+        let isPlaying = NowPlayingMonitor.shared.isPlaying == true
+        setTimer(&progressTimer, running: visible && isPlaying && layoutKinds.contains(.nowPlaying), interval: 0.5) {
+            $0.updatePlaybackProgress()
+        }
+    }
+
+    private func setTimer(
+        _ timer: inout Timer?, running: Bool, interval: TimeInterval,
+        action: @escaping @MainActor @Sendable (GlintBar) -> Void
+    ) {
+        guard running != (timer != nil) else { return }
+        timer?.invalidate()
+        timer = nil
+        guard running else { return }
+        timer = Timer.scheduledTimer(withTimeInterval: interval, repeats: true) { [weak self] _ in
+            MainActor.assumeIsolated { if let self { action(self) } }
+        }
+        timer?.tolerance = interval / 10
+    }
+
+    /// What has no change notification of its own.
+    private func poll() {
+        DisplayBrightness.updateBuiltInDisplay()
+        AudioController.shared.updateVolumeControl()
+        updateAvailability()
+        updateLevels([.keyboard, .display])
+        updateNightShift()
+        (itemViews[.clock] as? ClockView)?.update()
+    }
+
+    /// Brings everything up to date after a time out of sight.
+    private func catchUp() {
+        DisplayBrightness.updateBuiltInDisplay()
+        AudioController.shared.updateVolumeControl()
+        updateAvailability()
+        updateAll()
+    }
 
     // MARK: - Items
 
@@ -205,27 +278,25 @@ final class GlintBar: NSObject, NSTouchBarDelegate {
         let kinds = visibleKinds
         var views: [BarItemKind: NSView] = [:]
         for kind in kinds where !kind.isSpacer {
-            views[kind] = itemView(for: kind)
+            views[kind] = itemViews[kind] ?? makeItemView(kind)
         }
-        barView.main.setLayout(kinds, views: views)
+        // Views of items that left go with them, so nothing keeps updating them.
+        itemViews = views
         layoutKinds = kinds
-        // Sampling costs a little, so only while the meters are on the bar.
-        SystemResources.shared.setNeeded(kinds.contains(.systemResources), by: "bar")
-        refresh()
+        barView.main.setLayout(kinds, views: views)
+        if let content = panelState.content, views[content.anchor] == nil { closePanel(animated: false) }
+        updateAll()
+        updateActivity()
     }
 
-    private var layoutKinds: [BarItemKind] = []
+    /// Re-applies the layout when an item came or went (lid closed, output changed, …).
+    private func updateAvailability() {
+        if visibleKinds != layoutKinds { applyLayout() }
+    }
 
     private var visibleKinds: [BarItemKind] {
         let configuration = BarConfiguration.shared
         return (configuration.previewKinds ?? configuration.kinds).filter(\.isAvailable)
-    }
-
-    private func itemView(for kind: BarItemKind) -> NSView {
-        if let view = itemViews[kind] { return view }
-        let view = makeItemView(kind)
-        itemViews[kind] = view
-        return view
     }
 
     private func makeItemView(_ kind: BarItemKind) -> NSView {
@@ -259,7 +330,7 @@ final class GlintBar: NSObject, NSTouchBarDelegate {
             button.repeatsWhileHeld = true
             button.onTap = { [weak self] in
                 step.level.step(step.direction)
-                self?.refresh()
+                self?.updateLevels([step.level])
             }
             return button
         }
@@ -271,7 +342,7 @@ final class GlintBar: NSObject, NSTouchBarDelegate {
             case .nextTrack: Media.send(.nextTrack)
             case .mute:
                 AudioController.shared.isMuted.toggle()
-                self?.refresh()
+                self?.updateAudio()
             case .screenshot: SystemActions.screenshot()
             case .missionControl: SystemActions.missionControl()
             case .apps: SystemActions.apps()
@@ -285,14 +356,11 @@ final class GlintBar: NSObject, NSTouchBarDelegate {
             case .siri: SystemActions.siri()
             case .nightShift:
                 NightShift.toggle()
-                self?.refresh()
+                self?.updateNightShift()
             default: break
             }
         }
-        if kind == .appControls {
-            itemViews[kind] = button
-            updateAppButton()
-        }
+        if kind == .appControls { showFrontmostApp(on: button) }
         return button
     }
 
@@ -347,10 +415,12 @@ final class GlintBar: NSObject, NSTouchBarDelegate {
         panel.onOutsideTouch = { [weak self] in self?.closePanel() }
         panel.slider.onChange = { [weak self] value in
             guard let self else { return }
-            switch self.activePanel {
+            switch self.panelState.content {
             case .level(let level)?:
                 level.set(value)
-                self.refresh()
+                // Shown from the value just set: reading it back would ask another process
+                // on every move. Volume changes also come back through AudioController.
+                (self.itemViews[level.kind] as? GlassButton)?.setSymbol(level.symbol(for: value))
             case .media?:
                 // Only show where the song would jump to; seek once the finger lifts.
                 self.updateTimeLabels(position: Double(value) * (NowPlayingMonitor.shared.duration ?? 0))
@@ -358,20 +428,8 @@ final class GlintBar: NSObject, NSTouchBarDelegate {
                 break
             }
         }
-        panel.slider.onTouchBegan = { [weak self] in self?.closeDeadline = nil }
-        panel.slider.onTouchEnded = { [weak self] in
-            guard let self, let content = self.activePanel else { return }
-            if content == .media, let duration = NowPlayingMonitor.shared.duration {
-                NowPlayingMonitor.shared.seek(to: Double(self.barView.panel.slider.value) * duration)
-            }
-            let delay = Settings.autoCloseDelay
-            guard delay > 0 else {
-                self.closePanel()
-                return
-            }
-            self.closeDeadline = Date() + delay
-            self.barView.panel.showCloseButton()
-        }
+        panel.slider.onTouchBegan = { [weak self] in self?.panelTouchBegan() }
+        panel.slider.onTouchEnded = { [weak self] in self?.panelTouchEnded() }
     }
 
     /// Converts an x position in `view` to the slider's coordinate space.
@@ -382,8 +440,6 @@ final class GlintBar: NSObject, NSTouchBarDelegate {
     // MARK: - Slider panel
 
     private func openPanel(_ content: PanelContent, from anchor: NSView) {
-        activePanel = content
-        closeDeadline = nil
         switch content {
         case .level(let level):
             barView.openPanel(
@@ -401,38 +457,62 @@ final class GlintBar: NSObject, NSTouchBarDelegate {
                 value: nowPlaying.progress ?? 0
             )
         }
-        refresh()
+        // The touch that opened it is on it.
+        panelState = .held(content)
+        watchForLostTouch()
+    }
 
-        // Closing is driven by a deadline checked several times a second rather than a
-        // one-shot timer, so a missed or reordered touch event can't leave it open.
-        panelTimer?.invalidate()
-        panelTimer = Timer.scheduledTimer(withTimeInterval: 0.1, repeats: true) { [weak self] _ in
-            MainActor.assumeIsolated { self?.panelTick() }
+    private func panelTouchBegan() {
+        guard let content = panelState.content else { return }
+        panelState = .held(content)
+        watchForLostTouch()
+    }
+
+    private func panelTouchEnded() {
+        guard let content = panelState.content else { return }
+        if content == .media, let duration = NowPlayingMonitor.shared.duration {
+            NowPlayingMonitor.shared.seek(to: Double(barView.panel.slider.value) * duration)
+        }
+        let delay = Settings.autoCloseDelay
+        guard delay > 0 else {
+            closePanel()
+            return
+        }
+        panelState = .lingering(content)
+        barView.panel.showCloseButton()
+        schedulePanelTimer(after: delay) { $0.closePanel() }
+    }
+
+    /// While held, checks back when the touch would count as lost, and ends it if nothing
+    /// was heard from it since.
+    private func watchForLostTouch() {
+        let slider = barView.panel.slider
+        let idle = slider.isTracking ? Date().timeIntervalSince(slider.lastTouchActivity) : 0
+        schedulePanelTimer(after: max(Self.lostTouchTimeout - idle, 0.1)) { bar in
+            guard case .held = bar.panelState else { return }
+            if !slider.isTracking {
+                bar.panelTouchEnded() // tracking ended without a word; close as if it had
+            } else if Date().timeIntervalSince(slider.lastTouchActivity) >= Self.lostTouchTimeout {
+                slider.endTracking() // reports the touch-up that never came
+            } else {
+                bar.watchForLostTouch()
+            }
         }
     }
 
-    private func panelTick() {
-        let slider = barView.panel.slider
-        if slider.isTracking {
-            if Date().timeIntervalSince(slider.lastTouchActivity) > Self.lostTouchTimeout {
-                slider.endTracking() // sets the deadline via onTouchEnded
-            } else {
-                closeDeadline = nil
-            }
-            return
+    private func schedulePanelTimer(after delay: TimeInterval, _ action: @escaping @MainActor @Sendable (GlintBar) -> Void) {
+        panelTimer?.invalidate()
+        panelTimer = Timer.scheduledTimer(withTimeInterval: delay, repeats: false) { [weak self] _ in
+            MainActor.assumeIsolated { if let self { action(self) } }
         }
-        let deadline = closeDeadline ?? Date() + Settings.autoCloseDelay
-        closeDeadline = deadline
-        if Date() >= deadline { closePanel() }
     }
 
     private func closePanel(animated: Bool = true) {
-        guard activePanel != nil else { return }
-        activePanel = nil
+        guard panelState.content != nil else { return }
+        panelState = .closed
         panelTimer?.invalidate()
         panelTimer = nil
-        closeDeadline = nil
-        barView.panel.slider.endTracking()
+        barView.panel.slider.endTracking() // reports nothing now that it's closed
         barView.closePanel(animated: animated)
     }
 
@@ -452,46 +532,76 @@ final class GlintBar: NSObject, NSTouchBarDelegate {
     }
 
     // MARK: - State → UI
+    //
+    // Each change updates only what it affects: most readings are a round trip to another
+    // process (the audio server, CoreBrightness, the window server).
 
-    private func refresh() {
-        if visibleKinds != layoutKinds {
-            applyLayout() // calls back into refresh()
-            return
+    private func updateAll() {
+        updateLevels(Level.allCases)
+        updateMute()
+        updateNightShift()
+        updateNowPlaying()
+        (itemViews[.clock] as? ClockView)?.update()
+        (itemViews[.battery] as? BatteryView)?.update()
+    }
+
+    private func audioChanged() {
+        updateAvailability() // the new output may have no volume control
+        updateAudio()
+    }
+
+    private func nowPlayingChanged() {
+        updateNowPlaying()
+        updateActivity() // the line only moves while something plays
+    }
+
+    private func batteryChanged() {
+        updateAvailability()
+        (itemViews[.battery] as? BatteryView)?.update()
+    }
+
+    /// Level buttons' icons, and the open slider unless a finger is on it.
+    private func updateLevels(_ levels: [Level]) {
+        for level in levels {
+            let button = itemViews[level.kind] as? GlassButton
+            let isOpen = panelState.content == .level(level)
+            guard button != nil || isOpen else { continue }
+            // Mid-drag the button already shows the dragged value.
+            if isOpen, barView.panel.slider.isTracking { continue }
+            let value = level.value
+            button?.setSymbol(level.symbol(for: value))
+            if isOpen { barView.panel.slider.setValue(value) }
         }
-        for level in Level.allCases {
-            let kind: BarItemKind = switch level {
-            case .keyboard: .keyboardBrightness
-            case .display: .displayBrightness
-            case .volume: .volume
-            }
-            (itemViews[kind] as? GlassButton)?.setSymbol(level.symbol)
-        }
+    }
+
+    private func updateAudio() {
+        updateLevels([.volume])
+        updateMute()
+    }
+
+    private func updateMute() {
         (itemViews[.mute] as? GlassButton)?.isActive = AudioController.shared.isMuted
-        if let nightShift = itemViews[.nightShift] as? GlassButton {
-            nightShift.isActive = NightShift.isOn
-        }
+    }
 
-        let nowPlaying = NowPlayingMonitor.shared
-        let playSymbol = switch nowPlaying.isPlaying {
+    private func updateNightShift() {
+        (itemViews[.nightShift] as? GlassButton)?.isActive = NightShift.isOn
+    }
+
+    private func updateNowPlaying() {
+        let playSymbol = switch NowPlayingMonitor.shared.isPlaying {
         case true?: "pause.fill"
         case false?: "play.fill"
         case nil: "playpause.fill"
         }
         (itemViews[.playPause] as? GlassButton)?.setSymbol(playSymbol)
-        (itemViews[.clock] as? ClockView)?.update()
-        (itemViews[.battery] as? BatteryView)?.update()
         updatePlaybackProgress()
-
-        if case .level(let level)? = activePanel {
-            barView.panel.slider.setValue(level.value)
-        }
     }
 
     /// The Now Playing widget's line, and the scrubber while it's open and not held.
     private func updatePlaybackProgress() {
         let nowPlaying = NowPlayingMonitor.shared
         (itemViews[.nowPlaying] as? NowPlayingView)?.update(title: nowPlaying.title, artist: nowPlaying.artist, progress: nowPlaying.progress)
-        guard activePanel == .media else { return }
+        guard panelState.content == .media else { return }
         guard nowPlaying.canSeek else {
             closePanel() // the track ended or the player went away
             return
@@ -502,16 +612,11 @@ final class GlintBar: NSObject, NSTouchBarDelegate {
         updateTimeLabels(position: nowPlaying.position() ?? 0)
     }
 
-    private func updateAppButton() {
-        guard let button = itemViews[.appControls] as? GlassButton else { return }
+    private func showFrontmostApp(on button: GlassButton) {
         guard let icon = frontmostApp?.icon else {
             button.setSymbol("app.dashed")
             return
         }
-        let sized = NSImage(size: NSSize(width: 22, height: 22), flipped: false) { rect in
-            icon.draw(in: rect)
-            return true
-        }
-        button.setImage(sized)
+        button.setImage(BarItemKind.buttonIcon(icon))
     }
 }

@@ -17,7 +17,6 @@ final class BarView: NSView {
     init() {
         super.init(frame: NSRect(x: 0, y: 0, width: BarMetrics.width, height: BarMetrics.height))
         wantsLayer = true
-        panel.isHidden = true
         addSubview(main)
         addSubview(panel)
     }
@@ -33,8 +32,6 @@ final class BarView: NSView {
         panel.frame = bounds
     }
 
-    var isShowingPanel: Bool { !panel.isHidden && panel.isPresented }
-
     /// Pops the slider panel out of `anchor`; the rest of the row fades away.
     /// The row stays in the view hierarchy (only transparent) so the touch that
     /// began on `anchor` keeps being delivered to it.
@@ -42,7 +39,6 @@ final class BarView: NSView {
         from anchor: NSView, placement: SliderPanelView.Placement,
         leading: PanelAccessory, trailing: PanelAccessory, value: Float
     ) {
-        panel.isHidden = false
         panel.present(from: convert(anchor.bounds, from: anchor), placement: placement, leading: leading, trailing: trailing, value: value)
         NSAnimationContext.runAnimationGroup { context in
             context.duration = SliderPanelView.popDuration
@@ -51,11 +47,8 @@ final class BarView: NSView {
     }
 
     func closePanel(animated: Bool = true) {
-        guard isShowingPanel else { return }
-        panel.dismiss(animated: animated) { [weak self] in
-            // New touches should reach the row again once the panel is gone.
-            self?.panel.isHidden = true
-        }
+        guard panel.isPresented else { return }
+        panel.dismiss(animated: animated)
         NSAnimationContext.runAnimationGroup { context in
             context.duration = animated ? SliderPanelView.popDuration : 0
             main.animator().alphaValue = 1
@@ -134,6 +127,8 @@ final class SliderPanelView: NSView {
     /// A touch on the bar outside the panel and the ✕.
     var onOutsideTouch: (() -> Void)?
 
+    /// Showing, or on its way there. Once dismissed it hides, so new touches reach the row
+    /// underneath again.
     private(set) var isPresented = false
     private let background = NSGlassEffectView()
     private let leading = AccessoryView()
@@ -155,6 +150,7 @@ final class SliderPanelView: NSView {
 
     init() {
         super.init(frame: .zero)
+        isHidden = true
         allowedTouchTypes = .direct
         background.cornerRadius = BarMetrics.height / 2
         slider.trackInset = Self.trackInset
@@ -170,6 +166,7 @@ final class SliderPanelView: NSView {
     required init?(coder: NSCoder) { fatalError() }
 
     func present(from anchorFrame: NSRect, placement: Placement, leading: PanelAccessory, trailing: PanelAccessory, value: Float) {
+        isHidden = false
         isPresented = true
         self.anchorFrame = anchorFrame
         let width = Self.panelWidth
@@ -236,9 +233,8 @@ final class SliderPanelView: NSView {
         self.trailing.show(trailing, small: false)
     }
 
-    /// Collapses back into the anchor. `completion` runs unless the panel was
-    /// presented again in the meantime.
-    func dismiss(animated: Bool, completion: @escaping @MainActor () -> Void) {
+    /// Collapses back into the anchor, then hides unless presented again in the meantime.
+    func dismiss(animated: Bool) {
         isPresented = false
         generation += 1
         let current = generation
@@ -253,7 +249,7 @@ final class SliderPanelView: NSView {
             [leading, trailing, slider, closeButton].forEach { $0.animator().alphaValue = 0 }
         } completionHandler: {
             MainActor.assumeIsolated {
-                if current == self.generation { completion() }
+                if current == self.generation { self.isHidden = true }
             }
         }
     }

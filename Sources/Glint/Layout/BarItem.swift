@@ -141,9 +141,14 @@ enum BarItemKind: Hashable, Sendable {
 
     /// The app's icon, sized for a bar button.
     @MainActor static func icon(for app: URL) -> NSImage {
-        let icon = NSWorkspace.shared.icon(forFile: app.path)
-        icon.size = NSSize(width: 22, height: 22)
-        return icon
+        buttonIcon(NSWorkspace.shared.icon(forFile: app.path))
+    }
+
+    /// `icon` at the size bar buttons show app icons, leaving `icon` itself as it was.
+    @MainActor static func buttonIcon(_ icon: NSImage) -> NSImage {
+        let sized = icon.copy() as! NSImage
+        sized.size = NSSize(width: 22, height: 22)
+        return sized
     }
 
     /// Width on the Touch Bar in points. Flexible spaces share whatever is left.

@@ -13,7 +13,7 @@ final class GlassButton: NSView {
     var onTouchUp: (() -> Void)?
 
     /// When true the glass is tinted to show an "on" state (e.g. muted).
-    var isActive = false { didSet { updateTint() } }
+    var isActive = false { didSet { if isActive != oldValue { updateTint() } } }
 
     /// Calls `onTap` as soon as the finger lands, then repeatedly while it stays down,
     /// like the keyboard's volume and brightness keys.
@@ -23,6 +23,8 @@ final class GlassButton: NSView {
     private let content = NSView()
     private let imageView = NSImageView()
     private let width: CGFloat
+    /// The SF Symbol shown, so setting the same one again is free.
+    private var symbol: String?
 
     private var touchStartX: CGFloat = 0
     private var isPressed = false
@@ -62,11 +64,14 @@ final class GlassButton: NSView {
     override var intrinsicContentSize: NSSize { NSSize(width: width, height: BarMetrics.height) }
 
     func setSymbol(_ name: String) {
+        guard name != symbol else { return }
+        symbol = name
         let config = NSImage.SymbolConfiguration(pointSize: 15, weight: .semibold)
         imageView.image = NSImage(systemSymbolName: name, accessibilityDescription: nil)?.withSymbolConfiguration(config)
     }
 
     func setImage(_ image: NSImage?) {
+        symbol = nil
         imageView.image = image
     }
 
@@ -98,8 +103,7 @@ final class GlassButton: NSView {
             stopRepeating()
             return
         }
-        let endX = event.touches(matching: .ended, in: self).first?.location(in: self).x ?? touchStartX
-        if endX > -12, endX < bounds.width + 12 { onTap?() }
+        if touchEndedInside(event, fallbackX: touchStartX) { onTap?() }
     }
 
     override func touchesCancelled(with event: NSEvent) {
@@ -158,5 +162,14 @@ final class GlassButton: NSView {
         } else {
             glass.tintColor = nil
         }
+    }
+}
+
+extension NSView {
+    /// Whether the touch that ended with `event` lifted on this view, give or take a little,
+    /// and so counts as a tap. `fallbackX` stands in if the event doesn't say where.
+    func touchEndedInside(_ event: NSEvent, fallbackX: CGFloat) -> Bool {
+        let x = event.touches(matching: .ended, in: self).first?.location(in: self).x ?? fallbackX
+        return x > -12 && x < bounds.width + 12
     }
 }

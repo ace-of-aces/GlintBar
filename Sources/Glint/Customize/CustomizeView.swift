@@ -144,13 +144,14 @@ struct CustomizeView: View {
 
     @ViewBuilder private var hint: some View {
         Group {
-            if let drag, dropIsBlocked {
+            switch (drag, dropOutcome) {
+            case (let drag?, .blocked?):
                 Label("There’s no room for \(drag.item.kind.title). Remove something first.", systemImage: "exclamationmark.circle")
                     .foregroundStyle(.red)
-            } else if let drag, drag.source == .bar, !isOverBar(drag) {
+            case (let drag?, .remove?):
                 Label("Release to remove \(drag.item.kind.title).", systemImage: "minus.circle")
                     .foregroundStyle(.secondary)
-            } else {
+            default:
                 Text("Drag items into the Glint Bar, drag them along it to rearrange, and drag them out to remove them. Drop apps from Finder to add them.")
                     .foregroundStyle(.secondary)
             }
@@ -240,12 +241,13 @@ struct CustomizeView: View {
     @ViewBuilder private var ghost: some View {
         if let drag {
             let kind = drag.item.kind
-            let removing = drag.source == .bar && !isOverBar(drag)
+            let outcome = outcome(of: drag)
+            let badge = ghostBadge(outcome, source: drag.source)
             ItemPreview(kind: kind, width: kind == .flexibleSpace ? 92 : kind.width)
                 .padding(6)
                 .background(.black.opacity(0.92), in: RoundedRectangle(cornerRadius: 11, style: .continuous))
                 .overlay(alignment: .topTrailing) {
-                    if let badge = ghostBadge(drag) {
+                    if let badge {
                         Image(systemName: badge.symbol)
                             .font(.system(size: 17))
                             .symbolRenderingMode(.palette)
@@ -255,11 +257,11 @@ struct CustomizeView: View {
                     }
                 }
                 .scaleEffect(1.08)
-                .opacity(removing ? 0.55 : 1)
+                .opacity(outcome == .remove ? 0.55 : 1)
                 .shadow(color: .black.opacity(0.35), radius: 12, y: 6)
                 .position(x: drag.location.x - drag.grabOffset.width, y: drag.location.y - drag.grabOffset.height)
                 .allowsHitTesting(false)
-                .animation(.spring(duration: 0.2), value: ghostBadge(drag)?.symbol)
+                .animation(.spring(duration: 0.2), value: badge?.symbol)
         }
     }
 
@@ -296,62 +298,73 @@ struct CustomizeView: View {
 
     func finishDrag() {
         guard let drag else { return }
+        let outcome = outcome(of: drag)
         if drag.item.kind == .app(nil) {
             // The palette's App tile: leave its slot open while the user picks the app.
-            let index = insertionIndex(for: drag)
-            if let index { AppPicker.chooseApps { addApps($0, at: index) } }
+            if case .insert(let index) = outcome { AppPicker.chooseApps { addApps($0, at: index) } }
             withAnimation(.spring(duration: 0.32, bounce: 0.15)) { self.drag = nil }
             configuration.previewKinds = nil
             return
         }
         withAnimation(.spring(duration: 0.32, bounce: 0.15)) {
-            if let index = insertionIndex(for: drag) {
+            switch outcome {
+            case .insert(let index):
                 var items = baseItems(for: drag)
                 items.insert(drag.item, at: index)
                 configuration.setItems(items)
-            } else if drag.source == .bar, !isOverBar(drag) {
+            case .remove:
                 configuration.remove(drag.item.id)
+            case .blocked, .cancel:
+                break
             }
             self.drag = nil
         }
         configuration.previewKinds = nil
     }
 
-    /// The bar's hit area for drops; generous vertically so it's easy to aim for.
-    private func isOverBar(_ drag: DragSession) -> Bool {
-        barFrame.insetBy(dx: -16, dy: -40).contains(drag.location)
+    /// What letting go of the dragged item would do.
+    enum DropOutcome: Equatable {
+        case insert(at: Int)
+        /// Over the bar, but there's no room for it.
+        case blocked
+        /// A bar item dragged off the bar.
+        case remove
+        /// A palette item dragged off the bar.
+        case cancel
     }
+
+    private func outcome(of drag: DragSession) -> DropOutcome {
+        // The bar's hit area for drops; generous vertically so it's easy to aim for.
+        guard barFrame.insetBy(dx: -16, dy: -40).contains(drag.location) else {
+            return drag.source == .bar ? .remove : .cancel
+        }
+        let base = baseItems(for: drag).map(\.kind)
+        guard BarLayout.fits(base + [drag.item.kind], in: barSize.width) else { return .blocked }
+        let centerX = drag.location.x - drag.grabOffset.width - barFrame.minX
+        let frames = BarLayout.frames(for: base, in: barSize)
+        return .insert(at: frames.firstIndex { $0.midX > centerX } ?? base.count)
+    }
+
+    private var dropOutcome: DropOutcome? { drag.map(outcome(of:)) }
 
     /// The bar's items without the one being dragged.
     private func baseItems(for drag: DragSession) -> [BarItem] {
         configuration.items.filter { $0.id != drag.item.id }
     }
 
-    /// Where the dragged item would land, or nil if it's off the bar or doesn't fit.
-    private func insertionIndex(for drag: DragSession) -> Int? {
-        guard isOverBar(drag) else { return nil }
-        let base = baseItems(for: drag)
-        guard BarLayout.fits(base.map(\.kind) + [drag.item.kind], in: barSize.width) else { return nil }
-        let centerX = drag.location.x - drag.grabOffset.width - barFrame.minX
-        let frames = BarLayout.frames(for: base.map(\.kind), in: barSize)
-        return frames.firstIndex { $0.midX > centerX } ?? base.count
-    }
-
     private var isAdding: Bool {
-        guard let drag else { return false }
-        return insertionIndex(for: drag) != nil
+        if case .insert? = dropOutcome { true } else { false }
     }
 
-    private var dropIsBlocked: Bool {
-        guard let drag else { return false }
-        return isOverBar(drag) && insertionIndex(for: drag) == nil
-    }
+    private var dropIsBlocked: Bool { dropOutcome == .blocked }
 
-    private func ghostBadge(_ drag: DragSession) -> (symbol: String, color: Color)? {
-        if dropIsBlocked { return ("nosign", .red) }
-        if drag.source == .bar, !isOverBar(drag) { return ("minus.circle.fill", Color(white: 0.38)) }
-        if drag.source == .palette, isAdding { return ("plus.circle.fill", .green) }
-        return nil
+    private func ghostBadge(_ outcome: DropOutcome, source: DragSession.Source) -> (symbol: String, color: Color)? {
+        switch outcome {
+        case .blocked: ("nosign", .red)
+        case .remove: ("minus.circle.fill", Color(white: 0.38))
+        case .insert where source == .palette: ("plus.circle.fill", .green)
+        case .insert, .cancel: nil
+        }
     }
 
     // MARK: - Displayed bar
@@ -373,7 +386,7 @@ struct CustomizeView: View {
         if let drag {
             let original = entries.firstIndex { $0.id == drag.item.id }
             entries.removeAll { $0.id == drag.item.id }
-            if let index = insertionIndex(for: drag) {
+            if case .insert(let index) = outcome(of: drag) {
                 entries.insert(Entry(item: drag.item, frame: .zero, isPlaceholder: true), at: index)
             } else if let original {
                 entries.insert(Entry(item: drag.item, frame: .zero, isHidden: true), at: original)

@@ -142,10 +142,14 @@ final class NowPlayingMonitor {
         process = nil
         input = nil
         pending.removeAll()
-        if isPlaying != nil {
-            isPlaying = nil
-            onChange?()
-        }
+        // Without the helper nothing it reported can be trusted, the track included:
+        // left alone, a helper that gave up would leave the last song on the bar for good.
+        isPlaying = nil
+        title = nil
+        artist = nil
+        duration = nil
+        reportedElapsed = nil
+        onChange?()
         guard !isStopping else { return }
 
         // Back off if the helper keeps dying (e.g. a future macOS closes this path).

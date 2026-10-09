@@ -57,6 +57,7 @@ final class GlassSlider: NSView {
 
         solidKnob.wantsLayer = true
         solidKnob.layer?.backgroundColor = NSColor.white.cgColor
+        solidKnob.layer?.cornerRadius = Self.restKnob.height / 2
         solidKnob.layer?.shadowColor = NSColor.black.cgColor
         solidKnob.layer?.shadowOpacity = 0.35
         solidKnob.layer?.shadowRadius = 3
@@ -160,14 +161,14 @@ final class GlassSlider: NSView {
         CATransaction.commit()
 
         solidKnob.frame = knobFrame(Self.restKnob)
-        solidKnob.layer?.cornerRadius = Self.restKnob.height / 2
         if isMorphing {
             // Keep the size animation running, just follow the finger.
             glassKnob.setFrameOrigin(NSPoint(x: knobX - glassKnob.frame.width / 2, y: glassKnob.frame.minY))
         } else {
             let size = glassKnob.alphaValue > 0 ? Self.heldKnob : Self.restKnob
             glassKnob.frame = knobFrame(size)
-            glassKnob.cornerRadius = size.height / 2
+            // Runs on every move; the glass only needs reshaping when the size changed.
+            if glassKnob.cornerRadius != size.height / 2 { glassKnob.cornerRadius = size.height / 2 }
         }
     }
 

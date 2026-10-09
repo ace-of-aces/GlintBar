@@ -22,10 +22,15 @@ final class AudioController {
         bindDefaultDevice()
     }
 
-    var canChangeVolume: Bool {
+    /// Whether the output's volume can be changed (an HDMI output's often can't). Asking
+    /// takes a round trip to the audio server, so it's kept; `updateVolumeControl()`
+    /// asks again, as does every change of output.
+    private(set) var canChangeVolume = false
+
+    func updateVolumeControl() {
         var address = Self.address(kAudioHardwareServiceDeviceProperty_VirtualMainVolume)
         var settable: DarwinBoolean = false
-        return AudioObjectHasProperty(device, &address)
+        canChangeVolume = AudioObjectHasProperty(device, &address)
             && AudioObjectIsPropertySettable(device, &address, &settable) == noErr
             && settable.boolValue
     }
@@ -57,6 +62,7 @@ final class AudioController {
         }
 
         device = Self.defaultOutputDevice()
+        updateVolumeControl()
         let listener: AudioObjectPropertyListenerBlock = { [weak self] _, _ in
             MainActor.assumeIsolated { self?.onChange?() }
         }

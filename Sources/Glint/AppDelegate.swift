@@ -73,7 +73,30 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
             let app = note.userInfo?[NSWorkspace.applicationUserInfoKey] as? NSRunningApplication
             MainActor.assumeIsolated { self?.bar.frontmostAppChanged(app) }
         }
+
+        // The Touch Bar goes dark with the screens, and shows another user's session
+        // while theirs is in front; the bar needn't keep up meanwhile.
+        let displayEvents: [(Notification.Name, @MainActor @Sendable (AppDelegate) -> Void)] = [
+            (NSWorkspace.screensDidSleepNotification, { $0.screensAsleep = true }),
+            (NSWorkspace.screensDidWakeNotification, { $0.screensAsleep = false }),
+            // In case the screens' own wake goes missing.
+            (NSWorkspace.didWakeNotification, { $0.screensAsleep = false }),
+            (NSWorkspace.sessionDidResignActiveNotification, { $0.sessionInactive = true }),
+            (NSWorkspace.sessionDidBecomeActiveNotification, { $0.sessionInactive = false }),
+        ]
+        for (name, update) in displayEvents {
+            center.addObserver(forName: name, object: nil, queue: .main) { [weak self] _ in
+                MainActor.assumeIsolated {
+                    guard let self else { return }
+                    update(self)
+                    self.bar.isDisplayActive = !self.screensAsleep && !self.sessionInactive
+                }
+            }
+        }
     }
+
+    private var screensAsleep = false
+    private var sessionInactive = false
 
     /// Coalesces bursts of system events and gives the Touch Bar server a moment to settle.
     private func scheduleReassert() {

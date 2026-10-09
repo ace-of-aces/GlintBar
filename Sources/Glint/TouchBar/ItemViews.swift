@@ -19,8 +19,14 @@ final class NowPlayingView: NSView {
     private let progressFill = CALayer()
     private let width: CGFloat
 
-    private var touchStartX: CGFloat = 0
-    private var isScrubbing = false
+    /// Where the current touch is at: just down (a tap, or a scrub about to start), or
+    /// scrubbing.
+    private enum TouchState {
+        case none
+        case pressed(startX: CGFloat)
+        case scrubbing
+    }
+    private var touch = TouchState.none
     private var holdTask: Task<Void, Never>?
     private static let slideThreshold: CGFloat = 8
     private static let holdDelay: Duration = .milliseconds(350)
@@ -76,9 +82,12 @@ final class NowPlayingView: NSView {
     override var intrinsicContentSize: NSSize { NSSize(width: width, height: BarMetrics.height) }
 
     func update(title: String?, artist: String?, progress: Float?) {
-        self.title.stringValue = title ?? "Not Playing"
-        self.title.textColor = title == nil ? NSColor.white.withAlphaComponent(0.5) : .white
-        self.artist.stringValue = artist ?? ""
+        // Called twice a second while playing; text only changes with the track.
+        let titleText = title ?? "Not Playing"
+        let titleColor = title == nil ? NSColor.white.withAlphaComponent(0.5) : .white
+        if self.title.stringValue != titleText { self.title.stringValue = titleText }
+        if self.title.textColor != titleColor { self.title.textColor = titleColor }
+        if self.artist.stringValue != artist ?? "" { self.artist.stringValue = artist ?? "" }
         self.artist.isHidden = artist?.isEmpty ?? true
 
         let length = width - 2 * Self.progressInset
@@ -95,10 +104,10 @@ final class NowPlayingView: NSView {
     // MARK: - Touches
 
     override func touchesBegan(with event: NSEvent) {
-        guard let touch = event.touches(matching: .began, in: self).first else { return }
-        touchStartX = touch.location(in: self).x
-        isScrubbing = false
+        guard let location = event.touches(matching: .began, in: self).first?.location(in: self) else { return }
+        touch = .pressed(startX: location.x)
         glass.tintColor = NSColor.white.withAlphaComponent(0.28)
+        holdTask?.cancel()
         holdTask = Task { [weak self] in
             try? await Task.sleep(for: Self.holdDelay)
             guard let self, !Task.isCancelled else { return }
@@ -107,36 +116,44 @@ final class NowPlayingView: NSView {
     }
 
     override func touchesMoved(with event: NSEvent) {
-        guard let touch = event.touches(matching: .moved, in: self).first else { return }
-        let x = touch.location(in: self).x
-        if !isScrubbing, abs(x - touchStartX) > Self.slideThreshold { beginScrub() }
-        if isScrubbing { onScrubMoved?(x) }
+        guard let x = event.touches(matching: .moved, in: self).first?.location(in: self).x else { return }
+        if case .pressed(let startX) = touch, abs(x - startX) > Self.slideThreshold { beginScrub() }
+        if case .scrubbing = touch { onScrubMoved?(x) }
     }
 
     override func touchesEnded(with event: NSEvent) {
-        let wasScrubbing = finishTouch()
-        if wasScrubbing { onScrubEnded?() } else { onTap?() }
+        switch endTouch() {
+        case .scrubbing:
+            onScrubEnded?()
+        case .pressed(let startX):
+            // Like a button: sliding off before lifting (say, nothing seekable is playing)
+            // isn't a tap.
+            if touchEndedInside(event, fallbackX: startX) { onTap?() }
+        case .none:
+            break
+        }
     }
 
     override func touchesCancelled(with event: NSEvent) {
-        if finishTouch() { onScrubEnded?() }
+        if case .scrubbing = endTouch() { onScrubEnded?() }
     }
 
+    /// Turns the press into a scrub, if there's something to scrub.
     private func beginScrub() {
+        guard case .pressed(let startX) = touch, canScrub() else { return }
         holdTask?.cancel()
-        guard !isScrubbing, canScrub() else { return }
-        isScrubbing = true
+        touch = .scrubbing
         glass.tintColor = nil
         // From where the finger landed, so the movement that started the scrub counts.
-        onScrubBegan?(touchStartX)
+        onScrubBegan?(startX)
     }
 
-    /// Returns whether the touch was a scrub.
-    private func finishTouch() -> Bool {
+    /// Ends the touch and returns what it was.
+    private func endTouch() -> TouchState {
         holdTask?.cancel()
         glass.tintColor = nil
-        defer { isScrubbing = false }
-        return isScrubbing
+        defer { touch = .none }
+        return touch
     }
 }
 

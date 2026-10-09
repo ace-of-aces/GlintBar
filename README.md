@@ -17,7 +17,7 @@ the Touch Bar system-wide with its own controls, built on real `NSGlassEffectVie
   the level never jumps). The knob is solid at rest and turns into a clear glass lens
   while dragged.
 - When the finger lifts, an ✕ appears in the button's slot and the slider **closes
-  itself** 1.5 s later (configurable from the menu bar).
+  itself** half a second later (configurable from the menu bar).
 - **Play/pause shows the real playback state** (see below).
 - **Now Playing** shows the track with a blue progress line. Tap it to play or pause;
   press and slide (or press and hold) to pop out a scrubber with elapsed and remaining

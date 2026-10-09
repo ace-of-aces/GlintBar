@@ -7,9 +7,6 @@ struct ItemPreview: View {
     let kind: BarItemKind
     let width: CGFloat
 
-    /// Keeps the resource meters sampling while this preview is on screen.
-    @State private var previewID = UUID()
-
     private static let finderIcon = NSWorkspace.shared.icon(forFile: "/System/Library/CoreServices/Finder.app")
 
     var body: some View {
@@ -38,10 +35,9 @@ struct ItemPreview: View {
                     .lineLimit(1)
             }
         case .systemResources:
+            // Sampled while the customization window is open.
             ResourceMetersPreview(usage: SystemResources.shared.usage)
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
-                .onAppear { SystemResources.shared.setNeeded(true, by: previewID) }
-                .onDisappear { SystemResources.shared.setNeeded(false, by: previewID) }
         case .battery:
             // Battery has no SwiftUI observation; a slow tick is plenty for a preview.
             TimelineView(.periodic(from: .now, by: 30)) { _ in
