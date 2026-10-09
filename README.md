@@ -10,6 +10,14 @@
 
 ---
 
+<p align="center">
+    <a href="#features">Features</a> · 
+    <a href="#requirements">Requirements</a> · 
+    <a href="#installation">Installation</a>
+</p>
+
+---
+
 macOS's own Touch Bar has been left behind: volume and brightness popovers hang instead of
 closing, and none of it got the Liquid Glass look. GlintBar replaces the Control Strip in every
 app with a glassy bar of its own that you can arrange however you like.
