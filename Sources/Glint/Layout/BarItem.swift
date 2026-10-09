@@ -1,8 +1,7 @@
-import CoreGraphics
-import Foundation
+import AppKit
 
 /// Everything that can be placed in the Glint bar.
-enum BarItemKind: String, CaseIterable, Codable, Sendable {
+enum BarItemKind: Hashable, Sendable {
     case appControls
     case previousTrack
     case playPause
@@ -31,8 +30,40 @@ enum BarItemKind: String, CaseIterable, Codable, Sendable {
     case sleep
     case siri
     case clock
+    /// Launches an app. Without one it is the palette's "App" tile, which asks for
+    /// an app before it goes into the bar.
+    case app(URL?)
     case space
     case flexibleSpace
+
+    /// How the item is saved, e.g. `volume` or `app:/Applications/Safari.app`.
+    var rawValue: String {
+        switch self {
+        case .app(let url): Self.appPrefix + (url?.path ?? "")
+        default: String(describing: self)
+        }
+    }
+
+    init?(rawValue: String) {
+        if rawValue.hasPrefix(Self.appPrefix) {
+            let path = rawValue.dropFirst(Self.appPrefix.count)
+            guard !path.isEmpty else { return nil }
+            self = .launching(URL(fileURLWithPath: String(path)))
+            return
+        }
+        guard let kind = Self.simpleKinds.first(where: { $0.rawValue == rawValue }) else { return nil }
+        self = kind
+    }
+
+    private static let appPrefix = "app:"
+    private static let simpleKinds: [BarItemKind] = [
+        .appControls, .previousTrack, .playPause, .nextTrack, .nowPlaying,
+        .keyboardBrightness, .keyboardBrightnessDown, .keyboardBrightnessUp,
+        .displayBrightness, .displayBrightnessDown, .displayBrightnessUp, .nightShift,
+        .volume, .volumeDown, .volumeUp, .mute, .screenshot, .missionControl, .apps, .spotlight,
+        .showDesktop, .inputSources, .quickActions, .lockScreen, .screenSaver, .sleep, .siri, .clock,
+        .space, .flexibleSpace,
+    ]
 
     var title: String {
         switch self {
@@ -64,6 +95,8 @@ enum BarItemKind: String, CaseIterable, Codable, Sendable {
         case .sleep: "Sleep"
         case .siri: "Siri"
         case .clock: "Clock"
+        case .app(let url?): FileManager.default.displayName(atPath: url.path)
+        case .app(nil): "App"
         case .space: "Space"
         case .flexibleSpace: "Flexible Space"
         }
@@ -97,8 +130,16 @@ enum BarItemKind: String, CaseIterable, Codable, Sendable {
         case .screenSaver: "tv"
         case .sleep: "powersleep"
         case .siri: "siri"
-        case .appControls, .nowPlaying, .clock, .space, .flexibleSpace: nil
+        case .app(nil): "plus.app"
+        case .appControls, .nowPlaying, .clock, .app, .space, .flexibleSpace: nil
         }
+    }
+
+    /// The app's icon, sized for a bar button.
+    @MainActor static func icon(for app: URL) -> NSImage {
+        let icon = NSWorkspace.shared.icon(forFile: app.path)
+        icon.size = NSSize(width: 22, height: 22)
+        return icon
     }
 
     /// Width on the Touch Bar in points. Flexible spaces share whatever is left.
@@ -150,8 +191,22 @@ enum BarItemKind: String, CaseIterable, Codable, Sendable {
     /// Whether this Mac can use the item right now (no keyboard backlight, lid closed,
     /// an output without volume control, no Night Shift).
     @MainActor var isAvailable: Bool {
-        if self == .nightShift { return NightShift.isAvailable }
-        return (level ?? step?.level)?.isAvailable ?? true
+        switch self {
+        case .nightShift: NightShift.isAvailable
+        case .app(let url?): FileManager.default.fileExists(atPath: url.path)
+        default: (level ?? step?.level)?.isAvailable ?? true
+        }
+    }
+
+    /// A button launching `app`, with its URL in one canonical form so the same app
+    /// always compares equal, however it was picked.
+    static func launching(_ app: URL) -> BarItemKind {
+        .app(URL(fileURLWithPath: app.standardizedFileURL.path, isDirectory: true))
+    }
+
+    /// The app an app button launches.
+    var appURL: URL? {
+        if case .app(let url) = self { url } else { nil }
     }
 }
 

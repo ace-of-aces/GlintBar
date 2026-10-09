@@ -64,11 +64,17 @@ struct ItemPreview: View {
             }
             .glassEffect(.regular, in: .capsule)
         case .appControls:
-            Image(nsImage: Self.finderIcon)
-                .resizable()
-                .frame(width: 22, height: 22)
+            appIcon(Self.finderIcon)
+        case .app(let url?) where kind.isAvailable:
+            appIcon(BarItemKind.icon(for: url))
+        case .app(.some):
+            // The app has been deleted or moved; the Touch Bar leaves it out.
+            Image(systemName: "questionmark.app.dashed")
+                .font(.system(size: 15, weight: .semibold))
+                .foregroundStyle(.white.opacity(0.45))
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
                 .glassEffect(.regular, in: .capsule)
+                .help("\(kind.title) can’t be found. Right-click to choose another app.")
         default:
             Image(systemName: kind.symbol ?? "questionmark")
                 .font(.system(size: 15, weight: .semibold))
@@ -76,5 +82,13 @@ struct ItemPreview: View {
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
                 .glassEffect(.regular, in: .capsule)
         }
+    }
+
+    private func appIcon(_ icon: NSImage) -> some View {
+        Image(nsImage: icon)
+            .resizable()
+            .frame(width: 22, height: 22)
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
+            .glassEffect(.regular, in: .capsule)
     }
 }

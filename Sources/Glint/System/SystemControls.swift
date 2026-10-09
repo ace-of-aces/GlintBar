@@ -194,7 +194,12 @@ enum SystemActions {
         DistributedNotificationCenter.default().postNotificationName(.init(name), object: nil, userInfo: nil, deliverImmediately: true)
     }
 
+    /// Opens `app`, or brings it to the front if it's already running.
+    static func launch(_ app: URL) {
+        NSWorkspace.shared.openApplication(at: app, configuration: .init())
+    }
+
     private static func open(_ path: String) {
-        NSWorkspace.shared.openApplication(at: URL(fileURLWithPath: path), configuration: .init())
+        launch(URL(fileURLWithPath: path))
     }
 }

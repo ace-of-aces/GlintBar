@@ -1,4 +1,5 @@
 import SwiftUI
+import UniformTypeIdentifiers
 
 /// Drag-and-drop editor for the Glint bar: a true-to-size replica of the Touch Bar
 /// above a palette of every item. Drag items in, along, or out of the bar.
@@ -10,6 +11,8 @@ struct CustomizeView: View {
     @State var barFrame = CGRect.zero
     @State var tileFrames: [BarItemKind: CGRect] = [:]
     @State private var hovered: BarItem.ID?
+    /// Apps are being dragged in from Finder.
+    @State private var isTargetedByFinder = false
 
     private nonisolated static let space = "customize"
     private let barSize = CGSize(width: BarMetrics.width, height: BarMetrics.height)
@@ -68,13 +71,13 @@ struct CustomizeView: View {
         .background(.black, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
         .overlay {
             RoundedRectangle(cornerRadius: 12, style: .continuous)
-                .strokeBorder(.white.opacity(dropIsBlocked ? 0 : (isAdding ? 0.35 : 0.08)), lineWidth: 1)
+                .strokeBorder(.white.opacity(dropIsBlocked ? 0 : (isAdding || isTargetedByFinder ? 0.35 : 0.08)), lineWidth: 1)
         }
         .overlay {
             RoundedRectangle(cornerRadius: 12, style: .continuous)
                 .strokeBorder(.red.opacity(dropIsBlocked ? 0.7 : 0), lineWidth: 1.5)
         }
-        .animation(.easeOut(duration: 0.15), value: isAdding)
+        .animation(.easeOut(duration: 0.15), value: isAdding || isTargetedByFinder)
         .animation(.easeOut(duration: 0.15), value: dropIsBlocked)
         .frame(maxWidth: .infinity)
     }
@@ -89,6 +92,13 @@ struct CustomizeView: View {
         }
         .frame(width: barSize.width, height: barSize.height)
         .onGeometryChange(for: CGRect.self) { $0.frame(in: .named(Self.space)) } action: { barFrame = $0 }
+        .dropDestination(for: URL.self) { urls, location in
+            let apps = urls.filter { UTType(filenameExtension: $0.pathExtension)?.conforms(to: .application) ?? false }
+            guard !apps.isEmpty else { return false }
+            let frames = BarLayout.frames(for: configuration.kinds, in: barSize)
+            addApps(apps, at: frames.firstIndex { $0.midX > location.x })
+            return true
+        } isTargeted: { isTargetedByFinder = $0 }
         .animation(.spring(duration: 0.32, bounce: 0.15), value: entries.map(\.layoutKey))
     }
 
@@ -119,8 +129,12 @@ struct CustomizeView: View {
                 if inside { hovered = item.id } else if hovered == item.id { hovered = nil }
             }
             .contextMenu {
+                if item.kind.appURL != nil {
+                    Button("Change App…", systemImage: "arrow.left.arrow.right") { changeApp(of: item) }
+                }
                 Button("Remove \(item.kind.title)", systemImage: "minus.circle") { remove(item) }
             }
+            .onTapGesture(count: 2) { changeApp(of: item) }
             .gesture(dragGesture(item: item, source: .bar) {
                 CGPoint(x: barFrame.minX + entry.frame.midX, y: barFrame.midY)
             })
@@ -137,7 +151,7 @@ struct CustomizeView: View {
                 Label("Release to remove \(drag.item.kind.title).", systemImage: "minus.circle")
                     .foregroundStyle(.secondary)
             } else {
-                Text("Drag items into the Glint Bar, drag them along it to rearrange, and drag them out to remove them.")
+                Text("Drag items into the Glint Bar, drag them along it to rearrange, and drag them out to remove them. Drop apps from Finder to add them.")
                     .foregroundStyle(.secondary)
             }
         }
@@ -187,9 +201,18 @@ struct CustomizeView: View {
         }
         .frame(minWidth: 86)
         .opacity(isUsed || isUnavailable ? 0.38 : 1)
-        .help(isUsed ? "Already in the Glint Bar" : isUnavailable ? "Not available on this Mac right now" : "Drag into the Glint Bar, or click to add it at the end")
+        .help(isUsed ? "Already in the Glint Bar"
+            : isUnavailable ? "Not available on this Mac right now"
+            : kind == .app(nil) ? "Click to choose apps to add, or drag into the Glint Bar and pick one. You can also drop apps from Finder onto the bar."
+            : "Drag into the Glint Bar, or click to add it at the end")
         .contentShape(Rectangle())
-        .onTapGesture { if !isUsed { append(kind) } }
+        .onTapGesture {
+            if kind == .app(nil) {
+                AppPicker.chooseApps { addApps($0) }
+            } else if !isUsed {
+                append(kind)
+            }
+        }
         .gesture(
             dragGesture(item: BarItem(kind), source: .palette) {
                 let frame = tileFrames[kind] ?? .zero
@@ -273,6 +296,14 @@ struct CustomizeView: View {
 
     func finishDrag() {
         guard let drag else { return }
+        if drag.item.kind == .app(nil) {
+            // The palette's App tile: leave its slot open while the user picks the app.
+            let index = insertionIndex(for: drag)
+            if let index { AppPicker.chooseApps { addApps($0, at: index) } }
+            withAnimation(.spring(duration: 0.32, bounce: 0.15)) { self.drag = nil }
+            configuration.previewKinds = nil
+            return
+        }
         withAnimation(.spring(duration: 0.32, bounce: 0.15)) {
             if let index = insertionIndex(for: drag) {
                 var items = baseItems(for: drag)
@@ -378,6 +409,41 @@ struct CustomizeView: View {
         }
     }
 
+    /// Adds a button for each of `apps` at `index` (the end if nil), skipping apps
+    /// already in the bar; beeps for any that are skipped or don't fit.
+    private func addApps(_ apps: [URL], at index: Int? = nil) {
+        var items = configuration.items
+        var position = min(index ?? items.count, items.count)
+        var added = 0
+        for app in apps {
+            let kind = BarItemKind.launching(app)
+            guard !items.contains(where: { $0.kind == kind }),
+                  BarLayout.fits(items.map(\.kind) + [kind], in: barSize.width) else { continue }
+            items.insert(BarItem(kind), at: position)
+            position += 1
+            added += 1
+        }
+        if added < apps.count { NSSound.beep() }
+        guard added > 0 else { return }
+        withAnimation(.spring(duration: 0.32, bounce: 0.15)) {
+            configuration.setItems(items)
+        }
+    }
+
+    /// Lets the user pick a different app for an app button, in place.
+    private func changeApp(of item: BarItem) {
+        guard let current = item.kind.appURL else { return }
+        AppPicker.chooseReplacement(for: current) { app in
+            let kind = BarItemKind.launching(app)
+            guard kind != item.kind else { return }
+            guard !configuration.contains(kind) else {
+                NSSound.beep()
+                return
+            }
+            configuration.setItems(configuration.items.map { $0.id == item.id ? BarItem(kind, id: item.id) : $0 })
+        }
+    }
+
     private func append(_ kind: BarItemKind) {
         guard configuration.canAdd(kind, width: barSize.width) else {
             NSSound.beep()
@@ -404,6 +470,7 @@ private struct PaletteSection {
         PaletteSection(title: "System", kinds: [
             .appControls, .siri, .spotlight, .missionControl, .apps, .showDesktop, .inputSources, .quickActions,
         ]),
+        PaletteSection(title: "Your Apps", kinds: [.app(nil)]),
         PaletteSection(title: "Session", kinds: [.screenshot, .clock, .screenSaver, .lockScreen, .sleep]),
     ]
 }

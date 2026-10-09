@@ -30,7 +30,9 @@ the Touch Bar system-wide with its own controls, built on real `NSGlassEffectVie
   live. Besides the defaults there are Now Playing, Clock, Spotlight, Mission Control,
   Apps, Show Desktop, Input Sources, Quick Actions, Night Shift, step buttons for
   volume, brightness and keyboard backlight (hold to repeat), Screen Saver, Lock Screen
-  and Sleep, plus spaces and flexible spaces.
+  and Sleep, plus spaces and flexible spaces. **App** buttons launch an app of your choice
+  and show its icon: click the App tile (or drag it into the bar) to pick apps, or drop
+  apps from Finder onto the bar. Right-click or double-click one to change its app.
 - Menu bar item for switching modes, customizing, the auto-close delay and launch at login.
 
 ## Build & run
@@ -63,7 +65,7 @@ Commands simulate a finger on a level button (x positions in bar points):
 `appControls` and `glint`; `scrub:down`, `scrub:move:<x>`, `scrub:up` for Now Playing;
 `press:<item>` taps any button item (e.g. `press:volumeUp`).
 For the customization window: `customize`,
-`snapshot:<png path>`, and drags with `cdrag:bar:<index>` or `cdrag:palette:<item>`,
+`snapshot:<png path>`, and drags with `cdrag:bar:<index>` or `cdrag:palette:<item>` (`app` for the App tile),
 then `cdrag:to:<x>` or `cdrag:off`, then `cdrag:drop`.
 
 ## How it works

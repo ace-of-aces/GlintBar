@@ -169,7 +169,7 @@ final class GlintBar: NSObject, NSTouchBarDelegate {
             let driver = CustomizeDebugDriver.shared
             switch parts.count > 1 ? parts[1] : "" {
             case "bar": driver.perform(.pickUpBarItem(index: Int(parts[2]) ?? 0))
-            case "palette": BarItemKind(rawValue: parts[2]).map { driver.perform(.pickUpPaletteItem($0)) }
+            case "palette": (parts[2] == "app" ? .app(nil) : BarItemKind(rawValue: parts[2])).map { driver.perform(.pickUpPaletteItem($0)) }
             case "to": driver.perform(.moveOverBar(x: CGFloat(Double(parts[2]) ?? 0)))
             case "off": driver.perform(.moveOffBar)
             default: driver.perform(.drop)
@@ -222,6 +222,11 @@ final class GlintBar: NSObject, NSTouchBarDelegate {
             return view
         case .clock:
             return ClockView(width: kind.width)
+        case .app(let url?):
+            let button = GlassButton(symbol: "app.dashed", width: kind.width)
+            button.setImage(BarItemKind.icon(for: url))
+            button.onTap = { SystemActions.launch(url) }
+            return button
         default:
             break
         }
