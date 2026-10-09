@@ -172,22 +172,25 @@ struct CustomizeView: View {
     }
 
     private func paletteSection(_ section: PaletteSection) -> some View {
-        VStack(alignment: .leading, spacing: 10) {
+        VStack(alignment: .paletteTile, spacing: 10) {
             Text(section.title)
                 .font(.subheadline.weight(.semibold))
                 .foregroundStyle(.secondary)
             HStack(alignment: .top, spacing: 14) {
                 ForEach(section.kinds, id: \.self) { kind in
-                    tile(kind)
+                    tile(kind, alignsTitle: kind == section.kinds.first)
                 }
             }
         }
     }
 
-    private func tile(_ kind: BarItemKind) -> some View {
+    /// `alignsTitle` lines the section title up with this tile's black box,
+    /// which sits centered when the caption or minimum width is wider.
+    private func tile(_ kind: BarItemKind, alignsTitle: Bool = false) -> some View {
         let isUsed = kind.isUnique && configuration.contains(kind)
         let isUnavailable = !kind.isAvailable
         let previewWidth = kind == .flexibleSpace ? 92 : kind.width
+        let boxWidth = previewWidth + 20
         return VStack(spacing: 7) {
             ItemPreview(kind: kind, width: previewWidth)
                 .onGeometryChange(for: CGRect.self) { $0.frame(in: .named(Self.space)) } action: { tileFrames[kind] = $0 }
@@ -201,6 +204,7 @@ struct CustomizeView: View {
                 .fixedSize()
         }
         .frame(minWidth: 86)
+        .modifier(PaletteTileGuide(boxWidth: alignsTitle ? boxWidth : nil))
         .opacity(isUsed || isUnavailable ? 0.38 : 1)
         .help(isUsed ? "Already in the GlintBar"
             : isUnavailable ? "Not available on this Mac right now"
@@ -464,6 +468,29 @@ struct CustomizeView: View {
         }
         withAnimation(.spring(duration: 0.32, bounce: 0.15)) {
             configuration.setItems(configuration.items + [BarItem(kind)])
+        }
+    }
+}
+
+private extension HorizontalAlignment {
+    private enum PaletteTile: AlignmentID {
+        static func defaultValue(in d: ViewDimensions) -> CGFloat { d[.leading] }
+    }
+
+    /// The leading edge of a section's first tile box, which its title aligns to.
+    static let paletteTile = HorizontalAlignment(PaletteTile.self)
+}
+
+/// Sets the `.paletteTile` guide on a section's first tile only: an `HStack`
+/// averages the guides its children set explicitly.
+private struct PaletteTileGuide: ViewModifier {
+    let boxWidth: CGFloat?
+
+    func body(content: Content) -> some View {
+        if let boxWidth {
+            content.alignmentGuide(.paletteTile) { max(0, ($0.width - boxWidth) / 2) }
+        } else {
+            content
         }
     }
 }
