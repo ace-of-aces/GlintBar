@@ -203,6 +203,12 @@ final class BarController: NSObject, NSTouchBarDelegate {
             Battery.shared.debugOverride(percent.map {
                 Battery.State(percent: $0, isCharging: power == "charging", isOnPower: power == "charging" || power == "power")
             })
+        case "resources":
+            // resources:<cpu>:<gpu>:<memory>:<storage> in percent fakes the readings; resources:real undoes it.
+            let percents = parts.dropFirst().map { Double($0).map { $0 / 100 } }
+            SystemResources.shared.debugOverride(percents.count == 4 ? SystemResources.Usage(
+                cpu: percents[0], gpu: percents[1], memory: percents[2], storage: percents[3]
+            ) : nil)
         case "customize": CustomizeWindowController.shared.show()
         case "cdrag":
             // cdrag:bar:<index> · cdrag:palette:<kind> · cdrag:to:<bar x> · cdrag:off · cdrag:drop

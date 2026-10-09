@@ -29,7 +29,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     #if DEBUG
         /// Lets the bar be driven without touching it, e.g.:
         /// osascript -l JavaScript -e 'ObjC.import("Foundation"); $.NSDistributedNotificationCenter.defaultCenter
-        ///   .postNotificationNameObjectUserInfoDeliverImmediately("center.julian.GlintBar.debug", "slider:volume", $(), true)'
+        ///   .postNotificationNameObjectUserInfoDeliverImmediately("center.julian.GlintBar.debug", "down:volume", $(), true)'
         private func listenForDebugCommands() {
             DistributedNotificationCenter.default().addObserver(
                 forName: .init("center.julian.GlintBar.debug"), object: nil, queue: .main

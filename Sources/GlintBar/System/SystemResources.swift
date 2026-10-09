@@ -18,7 +18,14 @@ final class SystemResources {
         var storage: Double?
     }
 
-    private(set) var usage = Usage()
+    var usage: Usage {
+        #if DEBUG
+        if let debugUsage { return debugUsage }
+        #endif
+        return measured
+    }
+
+    private var measured = Usage()
     /// Called after every change, for observers outside SwiftUI (the Touch Bar).
     @ObservationIgnored var onChange: (() -> Void)?
 
@@ -53,11 +60,21 @@ final class SystemResources {
             guard let self else { return }
             self.isSampling = false
             // Dropped if sampling stopped in the meantime.
-            guard self.timer != nil, new != self.usage else { return }
-            self.usage = new
+            guard self.timer != nil, new != self.measured else { return }
+            self.measured = new
             self.onChange?()
         }
     }
+
+    #if DEBUG
+    private var debugUsage: Usage?
+
+    /// Shows `usage` instead of the real readings (nil goes back to them), for screenshots.
+    func debugOverride(_ usage: Usage?) {
+        debugUsage = usage
+        onChange?()
+    }
+    #endif
 }
 
 /// Takes the readings on a queue of its own: asking how much storage is free (purgeable
