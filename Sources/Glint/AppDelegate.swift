@@ -97,7 +97,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     }
 
     private func updateStatusIcon() {
-        statusItem?.button?.image = LensGlyph.menuBarImage(glintShowing: bar.state == .glint)
+        statusItem?.button?.image = EclipseGlyph.menuBarImage(glintShowing: bar.state == .glint)
     }
 
     func menuNeedsUpdate(_ menu: NSMenu) {

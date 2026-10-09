@@ -1,18 +1,20 @@
 import AppKit
 
-/// Glint's button in the Control Strip: the Lens glyph, a glass knob on a slider track.
-/// `playGlint()` runs a highlight once around the rim of the lens, then twinkles the star.
+/// Glint's button in the Control Strip: the Eclipse glyph, a black bar edged in light with a
+/// diamond on its rim. `playGlint()` runs light along the bar's top edge into the diamond,
+/// which flares.
 @MainActor
 final class TrayGlyphView: NSView {
     var onTap: (() -> Void)?
 
-    private typealias Glyph = LensGlyph.TouchBar
+    private typealias Glyph = EclipseGlyph.TouchBar
 
     /// Holds the glyph in its own coordinates (points, y down, like the SVG).
     private let glyph = CALayer()
     private let sweep = CAShapeLayer()
-    private let star = CAShapeLayer()
-    private var shapeLayers: [CALayer] = []
+    /// The halo and the star, scaled together around the diamond's center.
+    private let diamond = CALayer()
+    private var drawnLayers: [CALayer] = []
 
     init() {
         super.init(frame: NSRect(x: 0, y: 0, width: Glyph.size.width + 4, height: BarMetrics.height))
@@ -54,37 +56,34 @@ final class TrayGlyphView: NSView {
         guard !NSWorkspace.shared.accessibilityDisplayShouldReduceMotion else { return }
         let now = CACurrentMediaTime()
 
-        let turn = CABasicAnimation(keyPath: "transform.rotation.z")
-        turn.fromValue = 0
-        turn.toValue = 2 * CGFloat.pi
-        turn.duration = 1.43
-        turn.timingFunction = CAMediaTimingFunction(name: .easeInEaseOut)
+        let run = CABasicAnimation(keyPath: "transform.translation.x")
+        run.fromValue = 0
+        run.toValue = Glyph.sweepDistance
+        run.duration = 1.26
+        run.timingFunction = CAMediaTimingFunction(name: .easeInEaseOut)
         let fade = CAKeyframeAnimation(keyPath: "opacity")
         fade.values = [0, 1, 1, 0]
-        fade.keyTimes = [0, 0.14, 0.81, 1]
-        fade.duration = 1.76
+        fade.keyTimes = [0, 0.17, 0.83, 1]
         let sweepGroup = CAAnimationGroup()
-        sweepGroup.animations = [turn, fade]
-        sweepGroup.duration = 1.76
+        sweepGroup.animations = [run, fade]
+        sweepGroup.duration = 1.51
+        fade.duration = sweepGroup.duration
         sweepGroup.beginTime = now
         sweep.add(sweepGroup, forKey: "glint")
 
-        // The star twinkles as the highlight comes back around to it.
-        let grow = CAKeyframeAnimation(keyPath: "transform.scale")
-        grow.values = [1, 1.8, 1]
-        let spin = CAKeyframeAnimation(keyPath: "transform.rotation.z")
-        spin.values = [0, CGFloat.pi / 4, CGFloat.pi / 2]
-        for animation in [grow, spin] {
-            animation.keyTimes = [0, 0.4, 1]
-            animation.timingFunctions = [
-                CAMediaTimingFunction(name: .easeOut), CAMediaTimingFunction(name: .easeInEaseOut),
-            ]
+        // The diamond dims while the light travels, then flares as it arrives.
+        let scale = CAKeyframeAnimation(keyPath: "transform.scale")
+        scale.values = [1, 0.55, 0.55, 1.4, 1]
+        let brightness = CAKeyframeAnimation(keyPath: "opacity")
+        brightness.values = [1, 0.55, 0.55, 1, 1]
+        for animation in [scale, brightness] {
+            animation.keyTimes = [0, 0.13, 0.57, 0.74, 1]
         }
-        let twinkle = CAAnimationGroup()
-        twinkle.animations = [grow, spin]
-        twinkle.duration = 0.84
-        twinkle.beginTime = now + 1.26
-        star.add(twinkle, forKey: "glint")
+        let flare = CAAnimationGroup()
+        flare.animations = [scale, brightness]
+        flare.duration = 1.93
+        flare.beginTime = now
+        diamond.add(flare, forKey: "glint")
     }
 
     // MARK: - Touches
@@ -110,81 +109,68 @@ final class TrayGlyphView: NSView {
     // MARK: - Drawing
 
     private func buildGlyph() {
-        func shape(_ path: CGPath, alpha: CGFloat) -> CAShapeLayer {
-            let layer = CAShapeLayer()
-            layer.frame = glyph.bounds
-            layer.path = path
-            layer.fillColor = NSColor.white.withAlphaComponent(alpha).cgColor
-            return layer
+        // A soft glow just outside the rim, built from wider and wider faint strokes so it
+        // fades out like a blur at any scale.
+        let glow = CALayer()
+        glow.frame = glyph.bounds
+        let glowColor = NSColor(srgbRed: 0.95, green: 0.82, blue: 0.61, alpha: 0.055).cgColor
+        for step in 0..<8 {
+            let ring = CAShapeLayer()
+            ring.frame = glyph.bounds
+            ring.path = Glyph.glowPath
+            ring.fillColor = nil
+            ring.strokeColor = glowColor
+            ring.lineWidth = 1.6 + CGFloat(step) * 0.75
+            glow.addSublayer(ring)
         }
 
-        // The track runs through the knob; under the glass it swells.
-        shapeLayers = [
-            shape(Glyph.track.subtracting(Glyph.glass), alpha: 0.35),
-            shape(Glyph.fill.subtracting(Glyph.glass), alpha: 1),
-            shape(Glyph.swollenTrack.intersection(Glyph.glass), alpha: 0.35),
-            shape(Glyph.swollenFill.intersection(Glyph.glass), alpha: 1),
-            shape(LensGlyph.circle(Glyph.knob, Glyph.radius), alpha: 0.06),
-            rim(),
-        ]
+        let bar = CAShapeLayer()
+        bar.frame = glyph.bounds
+        bar.path = Glyph.barPath
+        bar.fillColor = NSColor.black.cgColor
+        bar.strokeColor = NSColor(srgbRed: 1, green: 0.965, blue: 0.9, alpha: 1).cgColor
+        bar.lineWidth = 1.1
 
         sweep.frame = glyph.bounds
-        sweep.anchorPoint = CGPoint(x: Glyph.knob.x / Glyph.size.width, y: Glyph.knob.y / Glyph.size.height)
-        sweep.position = Glyph.knob
-        let arc = CGMutablePath()
-        let start = -150 * CGFloat.pi / 180
-        arc.addArc(
-            center: Glyph.knob, radius: Glyph.radius, startAngle: start, endAngle: start + 0.14 * 2 * .pi,
-            clockwise: false)
-        sweep.path = arc
-        sweep.fillColor = nil
-        sweep.strokeColor = NSColor.white.cgColor
-        sweep.lineWidth = 1.4
-        sweep.lineCap = .round
+        sweep.path = Glyph.sweepPath
+        sweep.fillColor = NSColor.white.cgColor
         sweep.shadowColor = NSColor.white.cgColor
         sweep.shadowOpacity = 1
-        sweep.shadowRadius = 1.2
+        sweep.shadowRadius = 0.6
         sweep.shadowOffset = .zero
         sweep.opacity = 0
 
+        diamond.frame = glyph.bounds
+        diamond.anchorPoint = CGPoint(x: Glyph.diamond.x / Glyph.size.width, y: Glyph.diamond.y / Glyph.size.height)
+        diamond.position = Glyph.diamond
+
+        let halo = CAGradientLayer()
+        halo.type = .radial
+        halo.frame = CGRect(
+            x: Glyph.diamond.x - Glyph.haloRadius, y: Glyph.diamond.y - Glyph.haloRadius,
+            width: 2 * Glyph.haloRadius, height: 2 * Glyph.haloRadius)
+        halo.colors = [
+            NSColor.white.cgColor,
+            NSColor(srgbRed: 1, green: 0.953, blue: 0.863, alpha: 0.45).cgColor,
+            NSColor(srgbRed: 0.957, green: 0.851, blue: 0.651, alpha: 0).cgColor,
+        ]
+        halo.locations = [0, 0.25, 1]
+        halo.startPoint = CGPoint(x: 0.5, y: 0.5)
+        halo.endPoint = CGPoint(x: 1, y: 1)
+
+        let star = CAShapeLayer()
         star.frame = glyph.bounds
-        star.anchorPoint = CGPoint(x: Glyph.star.x / Glyph.size.width, y: Glyph.star.y / Glyph.size.height)
-        star.position = Glyph.star
-        star.path = Glyph.starPath
+        star.path = Glyph.diamondPath
         star.fillColor = NSColor.white.cgColor
 
-        shapeLayers += [sweep, star]
-        shapeLayers.forEach(glyph.addSublayer)
-    }
-
-    /// The rim of the lens: brightest at the top left where the light comes from.
-    private func rim() -> CALayer {
-        let box = CGRect(
-            x: Glyph.knob.x - Glyph.radius, y: Glyph.knob.y - Glyph.radius,
-            width: 2 * Glyph.radius, height: 2 * Glyph.radius
-        ).insetBy(dx: -1, dy: -1)
-        let gradient = CAGradientLayer()
-        gradient.frame = box
-        gradient.colors = [1, 0.35, 0.8].map { NSColor.white.withAlphaComponent($0).cgColor }
-        gradient.locations = [0, 0.55, 1]
-        gradient.startPoint = CGPoint(x: 0, y: 0)
-        gradient.endPoint = CGPoint(x: 1, y: 1)
-
-        let mask = CAShapeLayer()
-        mask.frame = gradient.bounds
-        var toBox = CGAffineTransform(translationX: -box.minX, y: -box.minY)
-        mask.path = LensGlyph.circle(Glyph.knob, Glyph.radius)
-            .copy(strokingWithWidth: Glyph.rimWidth, lineCap: .butt, lineJoin: .miter, miterLimit: 10)
-            .copy(using: &toBox)
-        gradient.mask = mask
-        return gradient
+        diamond.addSublayer(halo)
+        diamond.addSublayer(star)
+        drawnLayers = (glow.sublayers ?? []) + [bar, sweep, halo, star]
+        [glow, bar, sweep, diamond].forEach(glyph.addSublayer)
     }
 
     private func updateContentsScale() {
         let scale = window?.backingScaleFactor ?? 2
-        for layer in shapeLayers {
-            layer.contentsScale = scale
-            layer.mask?.contentsScale = scale
-        }
+        drawnLayers.forEach { $0.contentsScale = scale }
     }
 }

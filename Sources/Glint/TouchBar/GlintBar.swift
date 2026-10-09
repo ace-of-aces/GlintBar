@@ -85,7 +85,7 @@ final class GlintBar: NSObject, NSTouchBarDelegate {
         onStateChange?()
     }
 
-    /// Steps aside so the frontmost app's own Touch Bar shows; the lens
+    /// Steps aside so the frontmost app's own Touch Bar shows; the eclipse
     /// button in the Control Strip brings Glint back.
     func showAppControls() {
         closePanel(animated: false)
