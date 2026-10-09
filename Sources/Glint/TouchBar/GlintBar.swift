@@ -125,7 +125,7 @@ final class GlintBar: NSObject, NSTouchBarDelegate {
 
     /// Simulates a finger on a level button with bar x positions — `down:volume`
     /// (or `down:volume:850`), `move:700`, `up`, `tap:display` — plus `close`,
-    /// `appControls` and `glint`.
+    /// `appControls` and `glint`; `press:<item>` taps any button item, e.g. `press:volumeUp`.
     func debug(_ command: String) {
         let parts = command.split(separator: ":").map(String.init)
         func button(for name: String) -> GlassButton {
@@ -160,6 +160,9 @@ final class GlintBar: NSObject, NSTouchBarDelegate {
             case "move": view.onScrubMoved?(x)
             default: view.onScrubEnded?()
             }
+        case "press":
+            guard parts.count > 1, let kind = BarItemKind(rawValue: parts[1]) else { return }
+            (itemView(for: kind) as? GlassButton)?.onTap?()
         case "customize": CustomizeWindowController.shared.show()
         case "cdrag":
             // cdrag:bar:<index> · cdrag:palette:<kind> · cdrag:to:<bar x> · cdrag:off · cdrag:drop
@@ -184,8 +187,7 @@ final class GlintBar: NSObject, NSTouchBarDelegate {
 
     // MARK: - Items
 
-    /// Shows the configured items, minus controls this Mac can't use right now
-    /// (no keyboard backlight, lid closed, an output without volume control).
+    /// Shows the configured items, minus controls this Mac can't use right now.
     private func applyLayout() {
         let kinds = visibleKinds
         var views: [BarItemKind: NSView] = [:]
@@ -201,7 +203,7 @@ final class GlintBar: NSObject, NSTouchBarDelegate {
 
     private var visibleKinds: [BarItemKind] {
         let configuration = BarConfiguration.shared
-        return (configuration.previewKinds ?? configuration.kinds).filter { $0.level?.isAvailable ?? true }
+        return (configuration.previewKinds ?? configuration.kinds).filter(\.isAvailable)
     }
 
     private func itemView(for kind: BarItemKind) -> NSView {
@@ -229,6 +231,14 @@ final class GlintBar: NSObject, NSTouchBarDelegate {
             wireLevelButton(button, level: level)
             return button
         }
+        if let step = kind.step {
+            button.repeatsWhileHeld = true
+            button.onTap = { [weak self] in
+                step.level.step(step.direction)
+                self?.refresh()
+            }
+            return button
+        }
         button.onTap = { [weak self] in
             switch kind {
             case .appControls: self?.showAppControls()
@@ -241,8 +251,17 @@ final class GlintBar: NSObject, NSTouchBarDelegate {
             case .screenshot: SystemActions.screenshot()
             case .missionControl: SystemActions.missionControl()
             case .apps: SystemActions.apps()
+            case .spotlight: SystemActions.spotlight()
+            case .showDesktop: SystemActions.showDesktop()
+            case .inputSources: SystemActions.nextInputSource()
+            case .quickActions: SystemActions.quickActions()
             case .lockScreen: SystemActions.lockScreen()
+            case .screenSaver: SystemActions.screenSaver()
+            case .sleep: SystemActions.sleep()
             case .siri: SystemActions.siri()
+            case .nightShift:
+                NightShift.toggle()
+                self?.refresh()
             default: break
             }
         }
@@ -424,6 +443,9 @@ final class GlintBar: NSObject, NSTouchBarDelegate {
             (itemViews[kind] as? GlassButton)?.setSymbol(level.symbol)
         }
         (itemViews[.mute] as? GlassButton)?.isActive = AudioController.shared.isMuted
+        if let nightShift = itemViews[.nightShift] as? GlassButton {
+            nightShift.isActive = NightShift.isOn
+        }
 
         let nowPlaying = NowPlayingMonitor.shared
         let playSymbol = switch nowPlaying.isPlaying {

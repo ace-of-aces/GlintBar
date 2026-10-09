@@ -27,8 +27,10 @@ the Touch Bar system-wide with its own controls, built on real `NSGlassEffectVie
   brings Glint back; it glints once when you switch, so it's easy to find.
 - **Customizable**: choose **Customize Glint Bar…** from Glint's menu bar item (or open Glint.app
   again) to drag items into the bar, along it and out of it. The Touch Bar follows along
-  live. Besides the defaults there are Now Playing, Clock, Mission Control, Apps and
-  Lock Screen, plus spaces and flexible spaces.
+  live. Besides the defaults there are Now Playing, Clock, Spotlight, Mission Control,
+  Apps, Show Desktop, Input Sources, Quick Actions, Night Shift, step buttons for
+  volume, brightness and keyboard backlight (hold to repeat), Screen Saver, Lock Screen
+  and Sleep, plus spaces and flexible spaces.
 - Menu bar item for switching modes, customizing, the auto-close delay and launch at login.
 
 ## Build & run
@@ -58,7 +60,8 @@ osascript -l JavaScript -e 'ObjC.import("Foundation"); $.NSDistributedNotificati
 
 Commands simulate a finger on a level button (x positions in bar points):
 `down:volume` (or `down:volume:850`), `move:700`, `up`, `tap:display`; plus `close`,
-`appControls` and `glint`; `scrub:down`, `scrub:move:<x>`, `scrub:up` for Now Playing.
+`appControls` and `glint`; `scrub:down`, `scrub:move:<x>`, `scrub:up` for Now Playing;
+`press:<item>` taps any button item (e.g. `press:volumeUp`).
 For the customization window: `customize`,
 `snapshot:<png path>`, and drags with `cdrag:bar:<index>` or `cdrag:palette:<item>`,
 then `cdrag:to:<x>` or `cdrag:off`, then `cdrag:drop`.
@@ -74,6 +77,9 @@ instead of crashing:
 | System-wide bar, Control Strip button | `NSTouchBar presentSystemModalTouchBar:…`, `DFRElementSetControlStripPresenceForIdentifier` (DFRFoundation) |
 | Display brightness | `DisplayServicesGetBrightness` / `SetBrightness` (DisplayServices) |
 | Keyboard backlight | `KeyboardBrightnessClient` (CoreBrightness) |
+| Night Shift | `CBBlueLightClient` (CoreBrightness) |
+| Show Desktop | `CoreDockSendNotification` (HIServices) |
+| Spotlight, Quick Actions | The distributed notifications Apple's Control Strip posts |
 | Media commands | `MRMediaRemoteSendCommand` (MediaRemote) |
 | Playback state, seeking | MediaRemote, from inside `/usr/bin/perl` ([`GlintNowPlaying`](Sources/GlintNowPlaying)) |
 | Volume / mute | CoreAudio (public) |

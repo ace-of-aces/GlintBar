@@ -44,22 +44,27 @@ struct CustomizeView: View {
         VStack(alignment: .leading, spacing: 4) {
             Text("Customize Glint Bar")
                 .font(.title2.weight(.semibold))
-            Text("Your Glint Bar updates as you go.")
+            Text("Drag and drop items into the bar. Your Glint Bar updates as you go.")
                 .foregroundStyle(.secondary)
         }
     }
 
+    private static let escWidth: CGFloat = 64
+    private static let escSpacing: CGFloat = 17
+    private static let bezelPadding: CGFloat = 8
+    private static let touchBarWidth = escWidth + escSpacing + BarMetrics.width + 2 * bezelPadding
+
     /// The bar as it sits above the keyboard: Esc, then Glint's 1004 pt.
     private var touchBar: some View {
-        HStack(spacing: 17) {
+        HStack(spacing: Self.escSpacing) {
             Text("esc")
                 .font(.system(size: 13, weight: .medium))
                 .foregroundStyle(.white.opacity(0.5))
-                .frame(width: 64, height: BarMetrics.height)
+                .frame(width: Self.escWidth, height: BarMetrics.height)
                 .background(Color(white: 0.16), in: RoundedRectangle(cornerRadius: 6, style: .continuous))
             bar
         }
-        .padding(8)
+        .padding(Self.bezelPadding)
         .background(.black, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
         .overlay {
             RoundedRectangle(cornerRadius: 12, style: .continuous)
@@ -141,17 +146,14 @@ struct CustomizeView: View {
         .animation(nil, value: drag?.location)
     }
 
+    /// Sections side by side, wrapping onto new rows within the width of the bar below.
     private var palette: some View {
-        Grid(alignment: .topLeading, horizontalSpacing: 56, verticalSpacing: 24) {
-            GridRow {
-                paletteSection(.media)
-                paletteSection(.soundAndLight)
-            }
-            GridRow {
-                paletteSection(.system)
-                paletteSection(.spacing)
+        FlowLayout(horizontalSpacing: 56, verticalSpacing: 24) {
+            ForEach(PaletteSection.all, id: \.title) { section in
+                paletteSection(section)
             }
         }
+        .frame(width: Self.touchBarWidth, alignment: .leading)
     }
 
     private func paletteSection(_ section: PaletteSection) -> some View {
@@ -169,7 +171,7 @@ struct CustomizeView: View {
 
     private func tile(_ kind: BarItemKind) -> some View {
         let isUsed = kind.isUnique && configuration.contains(kind)
-        let isUnavailable = !(kind.level?.isAvailable ?? true)
+        let isUnavailable = !kind.isAvailable
         let previewWidth = kind == .flexibleSpace ? 92 : kind.width
         return VStack(spacing: 7) {
             ItemPreview(kind: kind, width: previewWidth)
@@ -391,10 +393,55 @@ private struct PaletteSection {
     let title: String
     let kinds: [BarItemKind]
 
-    static let media = PaletteSection(title: "Media", kinds: [.previousTrack, .playPause, .nextTrack, .nowPlaying])
-    static let soundAndLight = PaletteSection(title: "Sound & Light", kinds: [.keyboardBrightness, .displayBrightness, .volume, .mute])
-    static let system = PaletteSection(title: "System", kinds: [.appControls, .siri, .missionControl, .apps, .screenshot, .lockScreen, .clock])
-    static let spacing = PaletteSection(title: "Spacing", kinds: [.space, .flexibleSpace])
+    static let all = [
+        PaletteSection(title: "Media", kinds: [.previousTrack, .playPause, .nextTrack, .nowPlaying]),
+        PaletteSection(title: "Sound", kinds: [.volume, .volumeDown, .volumeUp, .mute]),
+        PaletteSection(title: "Light", kinds: [
+            .displayBrightness, .displayBrightnessDown, .displayBrightnessUp,
+            .keyboardBrightness, .keyboardBrightnessDown, .keyboardBrightnessUp, .nightShift,
+        ]),
+        PaletteSection(title: "Spacing", kinds: [.space, .flexibleSpace]),
+        PaletteSection(title: "System", kinds: [
+            .appControls, .siri, .spotlight, .missionControl, .apps, .showDesktop, .inputSources, .quickActions,
+        ]),
+        PaletteSection(title: "Session", kinds: [.screenshot, .clock, .screenSaver, .lockScreen, .sleep]),
+    ]
+}
+
+/// Lays subviews out left to right, starting a new row when the next one
+/// wouldn't fit the proposed width.
+private struct FlowLayout: Layout {
+    var horizontalSpacing: CGFloat
+    var verticalSpacing: CGFloat
+
+    func sizeThatFits(proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) -> CGSize {
+        let frames = frames(for: subviews, width: proposal.width ?? .infinity)
+        let union = frames.reduce(CGRect.zero) { $0.union($1) }
+        return CGSize(width: union.maxX, height: union.maxY)
+    }
+
+    func placeSubviews(in bounds: CGRect, proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) {
+        for (subview, frame) in zip(subviews, frames(for: subviews, width: bounds.width)) {
+            subview.place(at: CGPoint(x: bounds.minX + frame.minX, y: bounds.minY + frame.minY), proposal: ProposedViewSize(frame.size))
+        }
+    }
+
+    private func frames(for subviews: Subviews, width: CGFloat) -> [CGRect] {
+        var frames: [CGRect] = []
+        var origin = CGPoint.zero
+        var rowHeight: CGFloat = 0
+        for subview in subviews {
+            let size = subview.sizeThatFits(.unspecified)
+            if origin.x > 0, origin.x + size.width > width {
+                origin = CGPoint(x: 0, y: origin.y + rowHeight + verticalSpacing)
+                rowHeight = 0
+            }
+            frames.append(CGRect(origin: origin, size: size))
+            origin.x += size.width + horizontalSpacing
+            rowHeight = max(rowHeight, size.height)
+        }
+        return frames
+    }
 }
 
 #if DEBUG

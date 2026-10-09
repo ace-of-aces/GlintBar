@@ -9,13 +9,26 @@ enum BarItemKind: String, CaseIterable, Codable, Sendable {
     case nextTrack
     case nowPlaying
     case keyboardBrightness
+    case keyboardBrightnessDown
+    case keyboardBrightnessUp
     case displayBrightness
+    case displayBrightnessDown
+    case displayBrightnessUp
+    case nightShift
     case volume
+    case volumeDown
+    case volumeUp
     case mute
     case screenshot
     case missionControl
     case apps
+    case spotlight
+    case showDesktop
+    case inputSources
+    case quickActions
     case lockScreen
+    case screenSaver
+    case sleep
     case siri
     case clock
     case space
@@ -28,14 +41,27 @@ enum BarItemKind: String, CaseIterable, Codable, Sendable {
         case .playPause: "Play/Pause"
         case .nextTrack: "Next"
         case .nowPlaying: "Now Playing"
-        case .keyboardBrightness: "Keyboard Brightness"
-        case .displayBrightness: "Brightness"
-        case .volume: "Volume"
+        case .keyboardBrightness: "Keyboard Brightness Slider"
+        case .keyboardBrightnessDown: "Backlight Down"
+        case .keyboardBrightnessUp: "Backlight Up"
+        case .displayBrightness: "Brightness Slider"
+        case .displayBrightnessDown: "Brightness Down"
+        case .displayBrightnessUp: "Brightness Up"
+        case .nightShift: "Night Shift"
+        case .volume: "Volume Slider"
+        case .volumeDown: "Volume Down"
+        case .volumeUp: "Volume Up"
         case .mute: "Mute"
         case .screenshot: "Screenshot"
         case .missionControl: "Mission Control"
         case .apps: "Apps"
+        case .spotlight: "Spotlight"
+        case .showDesktop: "Show Desktop"
+        case .inputSources: "Input Sources"
+        case .quickActions: "Quick Actions"
         case .lockScreen: "Lock Screen"
+        case .screenSaver: "Screen Saver"
+        case .sleep: "Sleep"
         case .siri: "Siri"
         case .clock: "Clock"
         case .space: "Space"
@@ -50,13 +76,26 @@ enum BarItemKind: String, CaseIterable, Codable, Sendable {
         case .playPause: "playpause.fill"
         case .nextTrack: "forward.fill"
         case .keyboardBrightness: "light.max"
+        case .keyboardBrightnessDown: "light.min"
+        case .keyboardBrightnessUp: "light.max"
         case .displayBrightness: "sun.max.fill"
+        case .displayBrightnessDown: "sun.min.fill"
+        case .displayBrightnessUp: "sun.max.fill"
+        case .nightShift: "sun.horizon.fill"
         case .volume: "speaker.wave.2.fill"
+        case .volumeDown: "speaker.wave.1.fill"
+        case .volumeUp: "speaker.wave.3.fill"
         case .mute: "speaker.slash.fill"
         case .screenshot: "camera.fill"
         case .missionControl: "rectangle.3.group.fill"
         case .apps: "square.grid.3x3.fill"
+        case .spotlight: "magnifyingglass"
+        case .showDesktop: "menubar.dock.rectangle"
+        case .inputSources: "globe"
+        case .quickActions: "wand.and.sparkles"
         case .lockScreen: "lock.fill"
+        case .screenSaver: "tv"
+        case .sleep: "powersleep"
         case .siri: "siri"
         case .appControls, .nowPlaying, .clock, .space, .flexibleSpace: nil
         }
@@ -93,6 +132,26 @@ enum BarItemKind: String, CaseIterable, Codable, Sendable {
         case .volume: .volume
         default: nil
         }
+    }
+
+    /// The level a button nudges by one step, and in which direction.
+    var step: (level: Level, direction: Float)? {
+        switch self {
+        case .keyboardBrightnessDown: (.keyboard, -1)
+        case .keyboardBrightnessUp: (.keyboard, 1)
+        case .displayBrightnessDown: (.display, -1)
+        case .displayBrightnessUp: (.display, 1)
+        case .volumeDown: (.volume, -1)
+        case .volumeUp: (.volume, 1)
+        default: nil
+        }
+    }
+
+    /// Whether this Mac can use the item right now (no keyboard backlight, lid closed,
+    /// an output without volume control, no Night Shift).
+    @MainActor var isAvailable: Bool {
+        if self == .nightShift { return NightShift.isAvailable }
+        return (level ?? step?.level)?.isAvailable ?? true
     }
 }
 

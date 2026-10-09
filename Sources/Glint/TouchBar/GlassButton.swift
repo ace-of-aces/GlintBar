@@ -15,6 +15,10 @@ final class GlassButton: NSView {
     /// When true the glass is tinted to show an "on" state (e.g. muted).
     var isActive = false { didSet { updateTint() } }
 
+    /// Calls `onTap` as soon as the finger lands, then repeatedly while it stays down,
+    /// like the keyboard's volume and brightness keys.
+    var repeatsWhileHeld = false
+
     private let glass = NSGlassEffectView()
     private let content = NSView()
     private let imageView = NSImageView()
@@ -22,6 +26,9 @@ final class GlassButton: NSView {
 
     private var touchStartX: CGFloat = 0
     private var isPressed = false
+    private var repeatTask: Task<Void, Never>?
+    private static let repeatDelay: Duration = .milliseconds(400)
+    private static let repeatInterval: Duration = .milliseconds(90)
 
     init(symbol: String, width: CGFloat = 44) {
         self.width = width
@@ -72,6 +79,7 @@ final class GlassButton: NSView {
             onTouchDown(touchStartX)
         } else {
             setPressed(true)
+            if repeatsWhileHeld { startRepeating() }
         }
     }
 
@@ -86,6 +94,10 @@ final class GlassButton: NSView {
             return
         }
         setPressed(false)
+        if repeatsWhileHeld {
+            stopRepeating()
+            return
+        }
         let endX = event.touches(matching: .ended, in: self).first?.location(in: self).x ?? touchStartX
         if endX > -12, endX < bounds.width + 12 { onTap?() }
     }
@@ -95,7 +107,25 @@ final class GlassButton: NSView {
             onTouchUp()
         } else {
             setPressed(false)
+            stopRepeating()
         }
+    }
+
+    private func startRepeating() {
+        onTap?()
+        repeatTask?.cancel()
+        repeatTask = Task { [weak self] in
+            try? await Task.sleep(for: Self.repeatDelay)
+            while let self, !Task.isCancelled {
+                self.onTap?()
+                try? await Task.sleep(for: Self.repeatInterval)
+            }
+        }
+    }
+
+    private func stopRepeating() {
+        repeatTask?.cancel()
+        repeatTask = nil
     }
 
     // MARK: - Appearance

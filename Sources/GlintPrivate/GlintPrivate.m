@@ -143,6 +143,58 @@ BOOL GLKeyboardBrightnessSet(float value) {
     return client ? [client setBrightness:value forKeyboard:kid] : NO;
 }
 
+// MARK: - Night Shift
+
+typedef struct {
+    int hour;
+    int minute;
+} GLBlueLightTime;
+
+typedef struct {
+    BOOL active;
+    BOOL enabled; // Night Shift is on right now
+    BOOL sunSchedulePermitted;
+    int mode;
+    struct { GLBlueLightTime from, to; } schedule;
+    unsigned long long disableFlags;
+    BOOL available;
+} GLBlueLightStatus;
+
+@protocol GLBlueLightClient <NSObject>
++ (BOOL)supportsBlueLightReduction;
+- (BOOL)getBlueLightStatus:(GLBlueLightStatus *)status;
+- (BOOL)setEnabled:(BOOL)enabled;
+@end
+
+static id<GLBlueLightClient> GLBlueLight(void) {
+    static id<GLBlueLightClient> client;
+    static dispatch_once_t once;
+    dispatch_once(&once, ^{
+        if (!GLHandle(PRIVATE_FW("CoreBrightness"))) return;
+        Class cls = NSClassFromString(@"CBBlueLightClient");
+        if (![cls respondsToSelector:@selector(supportsBlueLightReduction)] || ![cls supportsBlueLightReduction]) return;
+        id candidate = [[cls alloc] init];
+        if (![candidate respondsToSelector:@selector(getBlueLightStatus:)]
+            || ![candidate respondsToSelector:@selector(setEnabled:)]) return;
+        client = candidate;
+    });
+    return client;
+}
+
+BOOL GLNightShiftAvailable(void) {
+    return GLBlueLight() != nil;
+}
+
+BOOL GLNightShiftIsOn(void) {
+    GLBlueLightStatus status = {0};
+    return [GLBlueLight() getBlueLightStatus:&status] && status.enabled;
+}
+
+BOOL GLNightShiftSetOn(BOOL on) {
+    id<GLBlueLightClient> client = GLBlueLight();
+    return client ? [client setEnabled:on] : NO;
+}
+
 // MARK: - Media
 
 static const char *kMediaRemote = PRIVATE_FW("MediaRemote");
@@ -158,5 +210,14 @@ BOOL GLLockScreen(void) {
     void (*fn)(void) = GLSymbol(PRIVATE_FW("login"), "SACLockScreenImmediate");
     if (!fn) return NO;
     fn();
+    return YES;
+}
+
+// MARK: - Dock
+
+BOOL GLDockSendNotification(NSString *name) {
+    void (*fn)(CFStringRef, int) = GLSymbol("/System/Library/Frameworks/ApplicationServices.framework/Frameworks/HIServices.framework/HIServices", "CoreDockSendNotification");
+    if (!fn) return NO;
+    fn((__bridge CFStringRef)name, 0);
     return YES;
 }

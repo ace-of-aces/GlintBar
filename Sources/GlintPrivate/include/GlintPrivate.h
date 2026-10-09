@@ -36,6 +36,12 @@ BOOL GLKeyboardBacklightAvailable(void);
 float GLKeyboardBrightnessGet(void);
 BOOL GLKeyboardBrightnessSet(float value);
 
+// MARK: - Night Shift (CoreBrightness)
+
+BOOL GLNightShiftAvailable(void);
+BOOL GLNightShiftIsOn(void);
+BOOL GLNightShiftSetOn(BOOL on);
+
 // MARK: - Media (MediaRemote)
 
 typedef NS_ENUM(NSInteger, GLMediaCommand) {
@@ -54,5 +60,10 @@ BOOL GLMediaSendCommand(GLMediaCommand command);
 
 /// Locks the screen right away, like the Lock Screen menu item.
 BOOL GLLockScreen(void);
+
+// MARK: - Dock (HIServices)
+
+/// Sends the Dock a notification such as `com.apple.showdesktop.awake`.
+BOOL GLDockSendNotification(NSString *name);
 
 NS_ASSUME_NONNULL_END

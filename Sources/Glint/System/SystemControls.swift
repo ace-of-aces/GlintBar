@@ -1,6 +1,8 @@
 import AppKit
+import Carbon
 import CoreGraphics
 import GlintPrivate
+import IOKit.pwr_mgt
 
 /// A continuous system value Glint can show as a slider.
 @MainActor
@@ -49,6 +51,15 @@ enum Level: CaseIterable {
         }
     }
 
+    /// Moves one notch up or down on the 16-step scale of the keyboard's level keys.
+    /// Volume steps from the level it had before muting, so turning it up unmutes.
+    func step(_ direction: Float) {
+        let current = self == .volume ? AudioController.shared.volume : value
+        set(((current * Self.steps).rounded() + direction) / Self.steps)
+    }
+
+    private static let steps: Float = 16
+
     /// Icons at the low and high ends of the slider.
     var lowSymbol: String {
         switch self {
@@ -91,6 +102,16 @@ enum DisplayBrightness {
 }
 
 @MainActor
+enum NightShift {
+    static var isAvailable: Bool { GLNightShiftAvailable() }
+    static var isOn: Bool { GLNightShiftIsOn() }
+
+    static func toggle() {
+        GLNightShiftSetOn(!isOn)
+    }
+}
+
+@MainActor
 enum Media {
     static func send(_ command: MediaCommand) {
         GLMediaSendCommand(command)
@@ -117,6 +138,60 @@ enum SystemActions {
 
     static func lockScreen() {
         GLLockScreen()
+    }
+
+    /// Opens or closes the Spotlight panel, as the Control Strip's button does.
+    static func spotlight() {
+        postDistributed("com.apple.spotlight.toggle")
+    }
+
+    /// Shows the system's Quick Actions popover on the Touch Bar.
+    static func quickActions() {
+        postDistributed("com.apple.ServicesTouchBar.showPopover")
+    }
+
+    static func showDesktop() {
+        GLDockSendNotification("com.apple.showdesktop.awake")
+    }
+
+    static func screenSaver() {
+        open("/System/Library/CoreServices/ScreenSaverEngine.app")
+    }
+
+    static func sleep() {
+        let port = IOPMFindPowerManagement(kIOMainPortDefault)
+        guard port != 0 else { return }
+        IOPMSleepSystem(port)
+        IOServiceClose(port)
+    }
+
+    /// Switches to the next keyboard input source, wrapping around.
+    static func nextInputSource() {
+        let filter = [
+            kTISPropertyInputSourceCategory as String: kTISCategoryKeyboardInputSource as String,
+            kTISPropertyInputSourceIsSelectCapable as String: true,
+        ] as CFDictionary
+        let list = TISCreateInputSourceList(filter, false)?.takeRetainedValue() as? [TISInputSource] ?? []
+        let sources = list.filter { source in
+            let type = property(kTISPropertyInputSourceType, of: source) as? String
+            return type == kTISTypeKeyboardLayout as String || type == kTISTypeKeyboardInputMode as String
+        }
+        guard !sources.isEmpty else { return }
+        let currentID = TISCopyCurrentKeyboardInputSource().map {
+            property(kTISPropertyInputSourceID, of: $0.takeRetainedValue()) as? String
+        } ?? nil
+        let index = sources.firstIndex { property(kTISPropertyInputSourceID, of: $0) as? String == currentID }
+        let next = sources[((index ?? -1) + 1) % sources.count]
+        TISSelectInputSource(next)
+    }
+
+    private static func property(_ key: CFString, of source: TISInputSource) -> AnyObject? {
+        guard let pointer = TISGetInputSourceProperty(source, key) else { return nil }
+        return Unmanaged<AnyObject>.fromOpaque(pointer).takeUnretainedValue()
+    }
+
+    private static func postDistributed(_ name: String) {
+        DistributedNotificationCenter.default().postNotificationName(.init(name), object: nil, userInfo: nil, deliverImmediately: true)
     }
 
     private static func open(_ path: String) {
