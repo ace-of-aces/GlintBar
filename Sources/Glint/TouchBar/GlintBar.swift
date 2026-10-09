@@ -50,6 +50,9 @@ final class GlintBar: NSObject, NSTouchBarDelegate {
         AudioController.shared.onChange = { [weak self] in self?.refresh() }
         NowPlayingMonitor.shared.onChange = { [weak self] in self?.refresh() }
         Battery.shared.onChange = { [weak self] in self?.refresh() }
+        SystemResources.shared.onChange = { [weak self] in
+            (self?.itemViews[.systemResources] as? SystemResourcesView)?.update(SystemResources.shared.usage)
+        }
         BarConfiguration.shared.onChange = { [weak self] in self?.applyLayout() }
         frontmostApp = NSWorkspace.shared.frontmostApplication
         applyLayout()
@@ -206,6 +209,8 @@ final class GlintBar: NSObject, NSTouchBarDelegate {
         }
         barView.main.setLayout(kinds, views: views)
         layoutKinds = kinds
+        // Sampling costs a little, so only while the meters are on the bar.
+        SystemResources.shared.setNeeded(kinds.contains(.systemResources), by: "bar")
         refresh()
     }
 
@@ -234,6 +239,8 @@ final class GlintBar: NSObject, NSTouchBarDelegate {
             return ClockView(width: kind.width)
         case .battery:
             return BatteryView(width: kind.width)
+        case .systemResources:
+            return SystemResourcesView(width: kind.width)
         case .app(let url?):
             let button = GlassButton(symbol: "app.dashed", width: kind.width)
             button.setImage(BarItemKind.icon(for: url))

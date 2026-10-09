@@ -1,0 +1,119 @@
+import Darwin
+import Foundation
+import IOKit
+import Observation
+
+/// CPU, GPU, memory and storage usage, sampled every couple of seconds while something
+/// shows it.
+@MainActor
+@Observable
+final class SystemResources {
+    static let shared = SystemResources()
+
+    /// Each value is 0–1, or nil until known (CPU needs two samples).
+    struct Usage: Equatable {
+        var cpu: Double?
+        var gpu: Double?
+        var memory: Double?
+        var storage: Double?
+    }
+
+    private(set) var usage = Usage()
+    /// Called after every change, for observers outside SwiftUI (the Touch Bar).
+    @ObservationIgnored var onChange: (() -> Void)?
+
+    @ObservationIgnored private var clients: Set<AnyHashable> = []
+    @ObservationIgnored private var timer: Timer?
+    @ObservationIgnored private var lastCPUTicks: [UInt64]?
+    @ObservationIgnored private let host = mach_host_self()
+
+    private static let interval: TimeInterval = 2
+
+    private init() {}
+
+    /// Starts sampling while at least one client needs the numbers.
+    func setNeeded(_ needed: Bool, by client: AnyHashable) {
+        if needed { clients.insert(client) } else { clients.remove(client) }
+        if clients.isEmpty {
+            timer?.invalidate()
+            timer = nil
+            lastCPUTicks = nil
+        } else if timer == nil {
+            sample()
+            timer = Timer.scheduledTimer(withTimeInterval: Self.interval, repeats: true) { [weak self] _ in
+                MainActor.assumeIsolated { self?.sample() }
+            }
+        }
+    }
+
+    private func sample() {
+        let new = Usage(cpu: cpuUsage(), gpu: Self.gpuUsage(), memory: memoryUsage(), storage: Self.storageUsage())
+        guard new != usage else { return }
+        usage = new
+        onChange?()
+    }
+
+    // MARK: - Readings
+
+    /// Busy share of all CPU time since the previous sample.
+    private func cpuUsage() -> Double? {
+        var info = host_cpu_load_info()
+        var count = mach_msg_type_number_t(MemoryLayout<host_cpu_load_info_data_t>.stride / MemoryLayout<integer_t>.stride)
+        let result = withUnsafeMutablePointer(to: &info) {
+            $0.withMemoryRebound(to: integer_t.self, capacity: Int(count)) {
+                host_statistics(host, HOST_CPU_LOAD_INFO, $0, &count)
+            }
+        }
+        guard result == KERN_SUCCESS else { return nil }
+        let ticks = [info.cpu_ticks.0, info.cpu_ticks.1, info.cpu_ticks.2, info.cpu_ticks.3].map(UInt64.init)
+        defer { lastCPUTicks = ticks }
+        guard let last = lastCPUTicks else { return nil }
+        // The counters are 32-bit and wrap; &- keeps the difference right across a wrap.
+        let delta = zip(ticks, last).map { UInt64(UInt32(truncatingIfNeeded: $0) &- UInt32(truncatingIfNeeded: $1)) }
+        let total = delta.reduce(0, +)
+        guard total > 0 else { return nil }
+        return Double(total - delta[Int(CPU_STATE_IDLE)]) / Double(total)
+    }
+
+    /// Like Activity Monitor's "Memory Used": app memory, wired and compressed.
+    private func memoryUsage() -> Double? {
+        var stats = vm_statistics64()
+        var count = mach_msg_type_number_t(MemoryLayout<vm_statistics64_data_t>.stride / MemoryLayout<integer_t>.stride)
+        let result = withUnsafeMutablePointer(to: &stats) {
+            $0.withMemoryRebound(to: integer_t.self, capacity: Int(count)) {
+                host_statistics64(host, HOST_VM_INFO64, $0, &count)
+            }
+        }
+        guard result == KERN_SUCCESS else { return nil }
+        let appPages = UInt64(stats.internal_page_count) - min(UInt64(stats.purgeable_count), UInt64(stats.internal_page_count))
+        let usedPages = appPages + UInt64(stats.wire_count) + UInt64(stats.compressor_page_count)
+        let total = Double(ProcessInfo.processInfo.physicalMemory)
+        return total > 0 ? min(Double(usedPages) * Double(getpagesize()) / total, 1) : nil
+    }
+
+    /// The GPU's own utilisation figure, as shown in Activity Monitor's GPU History.
+    private static func gpuUsage() -> Double? {
+        var iterator = io_iterator_t()
+        guard IOServiceGetMatchingServices(kIOMainPortDefault, IOServiceMatching("IOAccelerator"), &iterator) == KERN_SUCCESS else { return nil }
+        defer { IOObjectRelease(iterator) }
+        var busiest: Int?
+        while case let service = IOIteratorNext(iterator), service != 0 {
+            defer { IOObjectRelease(service) }
+            let statistics = IORegistryEntryCreateCFProperty(service, "PerformanceStatistics" as CFString, kCFAllocatorDefault, 0)?
+                .takeRetainedValue() as? [String: Any]
+            if let percent = statistics?["Device Utilization %"] as? Int {
+                busiest = max(busiest ?? 0, percent)
+            }
+        }
+        return busiest.map { min(Double($0) / 100, 1) }
+    }
+
+    /// The startup disk, counting purgeable space as free, like Finder does.
+    private static func storageUsage() -> Double? {
+        let keys: Set<URLResourceKey> = [.volumeTotalCapacityKey, .volumeAvailableCapacityForImportantUsageKey]
+        guard let values = try? URL(fileURLWithPath: "/").resourceValues(forKeys: keys),
+              let total = values.volumeTotalCapacity, total > 0,
+              let available = values.volumeAvailableCapacityForImportantUsage else { return nil }
+        return min(max(1 - Double(available) / Double(total), 0), 1)
+    }
+}

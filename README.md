@@ -27,7 +27,8 @@ the Touch Bar system-wide with its own controls, built on real `NSGlassEffectVie
   brings Glint back; it glints once when you switch, so it's easy to find.
 - **Customizable**: choose **Customize Glint Bar…** from Glint's menu bar item (or open Glint.app
   again) to drag items into the bar, along it and out of it. The Touch Bar follows along
-  live. Besides the defaults there are Now Playing, Clock, Battery, Spotlight, Mission
+  live. Besides the defaults there are Now Playing, Clock, Battery, System Resources (CPU,
+  GPU, RAM and storage), Spotlight, Mission
   Control, Apps, Show Desktop, Input Sources, Quick Actions, Night Shift, step buttons for
   volume, brightness and keyboard backlight (hold to repeat), Screen Saver, Lock Screen
   and Sleep, plus spaces and flexible spaces. **App** buttons launch an app of your choice
@@ -87,6 +88,7 @@ instead of crashing:
 | Playback state, seeking | MediaRemote, from inside `/usr/bin/perl` ([`GlintNowPlaying`](Sources/GlintNowPlaying)) |
 | Volume / mute | CoreAudio (public) |
 | Battery | IOKit power sources (public) |
+| System Resources | Mach host statistics, the GPU's IOKit `PerformanceStatistics`, volume capacity (all public) |
 
 Since macOS 15.4 MediaRemote tells third-party processes that nothing is playing.
 `NowPlayingMonitor` therefore loads the small `libGlintNowPlaying.dylib` into the
