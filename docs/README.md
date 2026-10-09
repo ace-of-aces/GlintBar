@@ -111,5 +111,14 @@ Replace `down:volume` with any of these (x positions are in bar points):
 | Now Playing | `scrub:down`, `scrub:move:<x>`, `scrub:up` |
 | Buttons | `press:<item>`, e.g. `press:volumeUp` |
 | Battery | `battery:<percent>` (optionally `:charging` or `:power`) fakes the level; `battery:real` undoes it |
+| System Resources | `resources:<cpu>:<gpu>:<memory>:<storage>` in percent fakes the readings; `resources:real` undoes it |
 | Customization window | `customize`, `snapshot:<png path>` |
 | Customization drags | `cdrag:bar:<index>` or `cdrag:palette:<item>` (`app` for the App tile), then `cdrag:to:<x>` or `cdrag:off`, then `cdrag:drop` |
+
+### Screenshots
+
+The screenshots in the README live in [`images`](images). They were taken with
+`screencapture -b` from a release build with debug commands
+(`swift build -c release -Xswiftc -DDEBUG`), with `battery:` and `resources:` faking the
+readings and a stand-in `libGlintBarNowPlaying.dylib` next to the binary that reports a
+made-up track. The Customize window was saved with `snapshot:`.

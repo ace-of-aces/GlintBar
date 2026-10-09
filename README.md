@@ -14,6 +14,8 @@ macOS's own Touch Bar has been left behind: volume and brightness popovers hang 
 closing, and none of it got the Liquid Glass look. GlintBar replaces the Control Strip in every
 app with a glassy bar of its own that you can arrange however you like.
 
+![GlintBar with its default layout](docs/images/default.png)
+
 ## Features
 
 ### A better Control Strip
@@ -22,7 +24,7 @@ Out of the box, GlintBar gives you the controls you reach for most:
 
 - **Media**: previous, play/pause and next. Play/pause always shows whether something is
   actually playing.
-- **Levels**: keyboard backlight, display brightness and volume, plus mute.
+- **Levels**: keyboard backlight, display brightness and volume.
 - **Shortcuts**: screenshot and Siri.
 - **App controls**: tap the app icon on the left to hand the Touch Bar back to the current app.
   GlintBar's button in Apple's Control Strip brings it back, with a little glint so it's easy
@@ -34,15 +36,23 @@ Touch the brightness, backlight or volume button and a slider grows straight out
 your finger down and drag: the level follows from where it is, so it never jumps. Let go and
 the slider closes on its own after a moment.
 
+![The volume slider popped out of its button while being dragged](docs/images/slider.png)
+
 ### Now Playing
 
 See the current track at a glance, with a progress line underneath. Tap to play or pause, or
 press and slide to scrub through the song with elapsed and remaining time.
 
+![Now Playing next to the media controls](docs/images/nowplaying.png)
+
+![Scrubbing through a song](docs/images/scrub.png)
+
 ### Make it yours
 
 Choose **Customize GlintBar** from the menu bar (or just open GlintBar.app again) and drag items into, along and out of the bar.
 The Touch Bar updates live as you go.
+
+![The Customize GlintBar window](docs/images/customize.png)
 
 |             | Available items                                                                                              |
 | ----------- | ------------------------------------------------------------------------------------------------------------ |
@@ -53,6 +63,10 @@ The Touch Bar updates live as you go.
 | **Session** | Screen Saver, Lock Screen, Sleep                                                                             |
 | **Apps**    | Buttons that launch any app you pick. Drop apps from Finder onto the bar, or right-click one to change it    |
 | **Layout**  | Spaces and flexible spaces                                                                                   |
+
+For example, a bar with Now Playing, a few favorite apps, System Resources, Battery and Clock:
+
+![A customized GlintBar](docs/images/custom.png)
 
 ### Menu bar
 
