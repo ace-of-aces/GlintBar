@@ -34,6 +34,19 @@ struct ItemPreview: View {
                     .foregroundStyle(.white)
                     .lineLimit(1)
             }
+        case .battery:
+            // Battery has no SwiftUI observation; a slow tick is plenty for a preview.
+            TimelineView(.periodic(from: .now, by: 30)) { _ in
+                if let state = Battery.shared.state {
+                    HStack(spacing: 5) {
+                        Text(BatteryView.text(for: state))
+                            .font(.system(size: 13, weight: .semibold).monospacedDigit())
+                            .foregroundStyle(.white)
+                        Image(nsImage: BatteryGlyph.image(for: state))
+                    }
+                    .lineLimit(1)
+                }
+            }
         case .nowPlaying:
             VStack(alignment: .leading, spacing: -1) {
                 Text(NowPlayingMonitor.shared.title ?? "Now Playing")

@@ -179,3 +179,45 @@ final class ClockView: NSView {
         if label.stringValue != text { label.stringValue = text }
     }
 }
+
+/// The battery's charge as a percentage next to a battery glyph, like the menu bar.
+@MainActor
+final class BatteryView: NSView {
+    private let label = NSTextField(labelWithString: "")
+    private let glyph = NSImageView()
+    private let width: CGFloat
+    private var shown: Battery.State?
+
+    static func text(for state: Battery.State) -> String {
+        (Double(state.percent) / 100).formatted(.percent)
+    }
+
+    init(width: CGFloat) {
+        self.width = width
+        super.init(frame: NSRect(x: 0, y: 0, width: width, height: BarMetrics.height))
+        label.font = .monospacedDigitSystemFont(ofSize: 13, weight: .semibold)
+        label.textColor = .white
+        glyph.imageScaling = .scaleNone
+        let stack = NSStackView(views: [label, glyph])
+        stack.spacing = 5
+        stack.translatesAutoresizingMaskIntoConstraints = false
+        addSubview(stack)
+        NSLayoutConstraint.activate([
+            stack.centerXAnchor.constraint(equalTo: centerXAnchor),
+            stack.centerYAnchor.constraint(equalTo: centerYAnchor),
+        ])
+        update()
+    }
+
+    @available(*, unavailable)
+    required init?(coder: NSCoder) { fatalError() }
+
+    override var intrinsicContentSize: NSSize { NSSize(width: width, height: BarMetrics.height) }
+
+    func update() {
+        guard let state = Battery.shared.state, state != shown else { return }
+        shown = state
+        label.stringValue = Self.text(for: state)
+        glyph.image = BatteryGlyph.image(for: state)
+    }
+}

@@ -30,6 +30,7 @@ enum BarItemKind: Hashable, Sendable {
     case sleep
     case siri
     case clock
+    case battery
     /// Launches an app. Without one it is the palette's "App" tile, which asks for
     /// an app before it goes into the bar.
     case app(URL?)
@@ -62,7 +63,7 @@ enum BarItemKind: Hashable, Sendable {
         .displayBrightness, .displayBrightnessDown, .displayBrightnessUp, .nightShift,
         .volume, .volumeDown, .volumeUp, .mute, .screenshot, .missionControl, .apps, .spotlight,
         .showDesktop, .inputSources, .quickActions, .lockScreen, .screenSaver, .sleep, .siri, .clock,
-        .space, .flexibleSpace,
+        .battery, .space, .flexibleSpace,
     ]
 
     var title: String {
@@ -95,6 +96,7 @@ enum BarItemKind: Hashable, Sendable {
         case .sleep: "Sleep"
         case .siri: "Siri"
         case .clock: "Clock"
+        case .battery: "Battery"
         case .app(let url?): FileManager.default.displayName(atPath: url.path)
         case .app(nil): "App"
         case .space: "Space"
@@ -131,7 +133,7 @@ enum BarItemKind: Hashable, Sendable {
         case .sleep: "powersleep"
         case .siri: "siri"
         case .app(nil): "plus.app"
-        case .appControls, .nowPlaying, .clock, .app, .space, .flexibleSpace: nil
+        case .appControls, .nowPlaying, .clock, .battery, .app, .space, .flexibleSpace: nil
         }
     }
 
@@ -148,6 +150,7 @@ enum BarItemKind: Hashable, Sendable {
         case .playPause, .keyboardBrightness, .displayBrightness, .volume: 56
         case .nowPlaying: 180
         case .clock: Self.clockWidth
+        case .battery: 80
         case .space: 18
         case .flexibleSpace: 0
         default: 44
@@ -193,6 +196,7 @@ enum BarItemKind: Hashable, Sendable {
     @MainActor var isAvailable: Bool {
         switch self {
         case .nightShift: NightShift.isAvailable
+        case .battery: Battery.shared.isAvailable
         case .app(let url?): FileManager.default.fileExists(atPath: url.path)
         default: (level ?? step?.level)?.isAvailable ?? true
         }

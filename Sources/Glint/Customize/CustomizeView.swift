@@ -471,7 +471,7 @@ private struct PaletteSection {
             .appControls, .siri, .spotlight, .missionControl, .apps, .showDesktop, .inputSources, .quickActions,
         ]),
         PaletteSection(title: "Your Apps", kinds: [.app(nil)]),
-        PaletteSection(title: "Session", kinds: [.screenshot, .clock, .screenSaver, .lockScreen, .sleep]),
+        PaletteSection(title: "Session", kinds: [.screenshot, .clock, .battery, .screenSaver, .lockScreen, .sleep]),
     ]
 }
 

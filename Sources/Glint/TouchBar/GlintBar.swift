@@ -49,6 +49,7 @@ final class GlintBar: NSObject, NSTouchBarDelegate {
         wirePanel()
         AudioController.shared.onChange = { [weak self] in self?.refresh() }
         NowPlayingMonitor.shared.onChange = { [weak self] in self?.refresh() }
+        Battery.shared.onChange = { [weak self] in self?.refresh() }
         BarConfiguration.shared.onChange = { [weak self] in self?.applyLayout() }
         frontmostApp = NSWorkspace.shared.frontmostApplication
         applyLayout()
@@ -59,6 +60,7 @@ final class GlintBar: NSObject, NSTouchBarDelegate {
     func start() {
         TouchBarPrivate.addTrayItem(trayItem)
         NowPlayingMonitor.shared.start()
+        Battery.shared.start()
         showGlint()
         pollTimer = Timer.scheduledTimer(withTimeInterval: 1.5, repeats: true) { [weak self] _ in
             // Brightness has no change notification we can use.
@@ -74,6 +76,7 @@ final class GlintBar: NSObject, NSTouchBarDelegate {
         pollTimer?.invalidate()
         progressTimer?.invalidate()
         NowPlayingMonitor.shared.stop()
+        Battery.shared.stop()
         TouchBarPrivate.dismiss(touchBar)
         TouchBarPrivate.removeTrayItem(trayItem)
     }
@@ -163,6 +166,13 @@ final class GlintBar: NSObject, NSTouchBarDelegate {
         case "press":
             guard parts.count > 1, let kind = BarItemKind(rawValue: parts[1]) else { return }
             (itemView(for: kind) as? GlassButton)?.onTap?()
+        case "battery":
+            // battery:<percent>[:charging|:power] fakes the battery; battery:real undoes it.
+            let percent = parts.count > 1 ? Int(parts[1]) : nil
+            let power = parts.count > 2 ? parts[2] : ""
+            Battery.shared.debugOverride(percent.map {
+                Battery.State(percent: $0, isCharging: power == "charging", isOnPower: power == "charging" || power == "power")
+            })
         case "customize": CustomizeWindowController.shared.show()
         case "cdrag":
             // cdrag:bar:<index> · cdrag:palette:<kind> · cdrag:to:<bar x> · cdrag:off · cdrag:drop
@@ -222,6 +232,8 @@ final class GlintBar: NSObject, NSTouchBarDelegate {
             return view
         case .clock:
             return ClockView(width: kind.width)
+        case .battery:
+            return BatteryView(width: kind.width)
         case .app(let url?):
             let button = GlassButton(symbol: "app.dashed", width: kind.width)
             button.setImage(BarItemKind.icon(for: url))
@@ -460,6 +472,7 @@ final class GlintBar: NSObject, NSTouchBarDelegate {
         }
         (itemViews[.playPause] as? GlassButton)?.setSymbol(playSymbol)
         (itemViews[.clock] as? ClockView)?.update()
+        (itemViews[.battery] as? BatteryView)?.update()
         updatePlaybackProgress()
 
         if case .level(let level)? = activePanel {
