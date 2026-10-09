@@ -1,10 +1,10 @@
 import AppKit
 import Carbon
 import CoreGraphics
-import GlintPrivate
+import GlintBarPrivate
 import IOKit.pwr_mgt
 
-/// A continuous system value Glint can show as a slider.
+/// A continuous system value GlintBar can show as a slider.
 @MainActor
 enum Level: CaseIterable {
     case keyboard

@@ -1,6 +1,6 @@
 import AppKit
 
-/// Glint's button in the Control Strip: the Eclipse glyph, a black bar edged in light with a
+/// GlintBar's button in the Control Strip: the Eclipse glyph, a black bar edged in light with a
 /// diamond on its rim. `playGlint()` runs light along the bar's top edge into the diamond,
 /// which flares.
 @MainActor
@@ -22,7 +22,7 @@ final class TrayGlyphView: NSView {
         wantsLayer = true
         setAccessibilityElement(true)
         setAccessibilityRole(.button)
-        setAccessibilityLabel("Show Glint")
+        setAccessibilityLabel("Show GlintBar")
 
         glyph.bounds = CGRect(origin: .zero, size: Glyph.size)
         glyph.isGeometryFlipped = true

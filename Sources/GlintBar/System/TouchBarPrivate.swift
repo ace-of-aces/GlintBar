@@ -1,7 +1,7 @@
 import AppKit
-import GlintPrivate
+import GlintBarPrivate
 
-/// Swift face of the private system-modal Touch Bar API (see GlintPrivate.h).
+/// Swift face of the private system-modal Touch Bar API (see GlintBarPrivate.h).
 @MainActor
 enum TouchBarPrivate {
     static var isAvailable: Bool { GLSystemModalAvailable() }

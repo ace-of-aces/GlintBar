@@ -3,13 +3,13 @@
 <plist version="1.0">
 <dict>
     <key>CFBundleName</key>
-    <string>Glint</string>
+    <string>GlintBar</string>
     <key>CFBundleDisplayName</key>
-    <string>Glint</string>
+    <string>GlintBar</string>
     <key>CFBundleIdentifier</key>
-    <string>center.julian.Glint</string>
+    <string>center.julian.GlintBar</string>
     <key>CFBundleExecutable</key>
-    <string>Glint</string>
+    <string>GlintBar</string>
     <key>CFBundlePackageType</key>
     <string>APPL</string>
     <key>CFBundleIconFile</key>

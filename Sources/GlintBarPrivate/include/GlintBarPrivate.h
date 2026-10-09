@@ -54,7 +54,7 @@ typedef NS_ENUM(NSInteger, GLMediaCommand) {
 } NS_SWIFT_NAME(MediaCommand);
 
 BOOL GLMediaSendCommand(GLMediaCommand command);
-// Playback *state* can't be read from here; see Sources/GlintNowPlaying.
+// Playback *state* can't be read from here; see Sources/GlintBarNowPlaying.
 
 // MARK: - Session (login)
 

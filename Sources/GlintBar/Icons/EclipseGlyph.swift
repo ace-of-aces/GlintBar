@@ -1,13 +1,13 @@
 import AppKit
 
-/// Glint's icon outside the app icon: a black bar in front of a bright light, with a diamond
+/// GlintBar's icon outside the app icon: a black bar in front of a bright light, with a diamond
 /// of light on its rim. The shapes mirror `Design/Icons` (`menubar.svg`, `touchbar.svg`)
 /// point for point, with y pointing down.
 enum EclipseGlyph {
     // MARK: - Menu bar
 
     /// The status item image (22 × 16 pt, template): the bar inside its ring of light, with
-    /// the diamond on the ring while Glint's bar is showing and without it while the app's own
+    /// the diamond on the ring while GlintBar is showing and without it while the app's own
     /// controls are.
     static func menuBarImage(glintShowing: Bool) -> NSImage {
         let image = NSImage(size: NSSize(width: 22, height: 16), flipped: true) { _ in
@@ -20,7 +20,7 @@ enum EclipseGlyph {
             return true
         }
         image.isTemplate = true
-        image.accessibilityDescription = "Glint"
+        image.accessibilityDescription = "GlintBar"
         return image
     }
 

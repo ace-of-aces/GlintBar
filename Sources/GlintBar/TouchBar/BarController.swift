@@ -1,9 +1,9 @@
 import AppKit
 
-/// Owns the system-wide Glint Touch Bar: presenting it over every app,
+/// Owns GlintBar's system-wide Touch Bar: presenting it over every app,
 /// stepping aside for an app's own controls, and the self-closing sliders.
 @MainActor
-final class GlintBar: NSObject, NSTouchBarDelegate {
+final class BarController: NSObject, NSTouchBarDelegate {
     enum State { case glint, appControls }
 
     private(set) var state: State = .glint
@@ -19,12 +19,12 @@ final class GlintBar: NSObject, NSTouchBarDelegate {
         }
     }
 
-    private static let barItemID = NSTouchBarItem.Identifier("center.julian.glint.bar")
-    private static let trayItemID = NSTouchBarItem.Identifier("center.julian.glint.tray")
+    private static let barItemID = NSTouchBarItem.Identifier("center.julian.glintbar.bar")
+    private static let trayItemID = NSTouchBarItem.Identifier("center.julian.glintbar.tray")
 
     private let touchBar = NSTouchBar()
     private let barView = BarView()
-    private let trayItem = NSCustomTouchBarItem(identifier: GlintBar.trayItemID)
+    private let trayItem = NSCustomTouchBarItem(identifier: BarController.trayItemID)
     private let trayGlyph = TrayGlyphView()
 
     private var isStarted = false
@@ -122,7 +122,7 @@ final class GlintBar: NSObject, NSTouchBarDelegate {
     }
 
     /// Steps aside so the frontmost app's own Touch Bar shows; the eclipse
-    /// button in the Control Strip brings Glint back.
+    /// button in the Control Strip brings GlintBar back.
     func showAppControls() {
         closePanel(animated: false)
         state = .appControls
@@ -218,7 +218,7 @@ final class GlintBar: NSObject, NSTouchBarDelegate {
         case "close": closePanel()
         case "appControls": showAppControls()
         case "glint": showGlint()
-        default: NSLog("Glint: unknown debug command \(command)")
+        default: NSLog("GlintBar: unknown debug command \(command)")
         }
     }
     #endif
@@ -241,7 +241,7 @@ final class GlintBar: NSObject, NSTouchBarDelegate {
 
     private func setTimer(
         _ timer: inout Timer?, running: Bool, interval: TimeInterval,
-        action: @escaping @MainActor @Sendable (GlintBar) -> Void
+        action: @escaping @MainActor @Sendable (BarController) -> Void
     ) {
         guard running != (timer != nil) else { return }
         timer?.invalidate()
@@ -500,7 +500,7 @@ final class GlintBar: NSObject, NSTouchBarDelegate {
         }
     }
 
-    private func schedulePanelTimer(after delay: TimeInterval, _ action: @escaping @MainActor @Sendable (GlintBar) -> Void) {
+    private func schedulePanelTimer(after delay: TimeInterval, _ action: @escaping @MainActor @Sendable (BarController) -> Void) {
         panelTimer?.invalidate()
         panelTimer = Timer.scheduledTimer(withTimeInterval: delay, repeats: false) { [weak self] _ in
             MainActor.assumeIsolated { if let self { action(self) } }

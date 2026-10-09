@@ -1,17 +1,17 @@
 #!/usr/bin/env node
 /**
- * Glint's icon, Eclipse: a black bar in front of a bright light, like the moon across the
+ * GlintBar's icon, Eclipse: a black bar in front of a bright light, like the moon across the
  * sun. The glint is the diamond ring, the single bead of light just before totality.
  *
  * Writes four drawings next to this script:
  *   app.svg            1024x1024 macOS app icon (continuous-corner body on the 824pt grid)
- *   menubar.svg        22x16pt template image, Glint bar showing
+ *   menubar.svg        22x16pt template image, GlintBar showing
  *   menubar-off.svg    22x16pt template image, app controls showing
  *   touchbar.svg       32x22pt Control Strip glyph at rest; the "sweep" group is the light
  *                      that runs along the bar's top edge when the glint plays
  *
  * The app uses app.svg through scripts/make-app-icon.sh. The menu bar and Control Strip
- * glyphs are drawn in code from the same geometry (Sources/Glint/Icons/EclipseGlyph.swift).
+ * glyphs are drawn in code from the same geometry (Sources/GlintBar/Icons/EclipseGlyph.swift).
  *
  * Usage: node Design/Icons/make-icons.mjs
  */

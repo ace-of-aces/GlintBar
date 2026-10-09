@@ -1,10 +1,10 @@
-#import "GlintNowPlaying.h"
+#import "GlintBarNowPlaying.h"
 #include <dlfcn.h>
 #include <unistd.h>
 
 // Since macOS 15.4 MediaRemote answers now-playing queries from third-party processes
 // with "nothing is playing". This library runs inside /usr/bin/perl, which is
-// Apple-signed and may still ask, and relays the answers to Glint over stdout.
+// Apple-signed and may still ask, and relays the answers to GlintBar over stdout.
 // Commands that need the same standing (seeking) come back over stdin.
 
 typedef void (*MRRegisterForNotificationsFn)(dispatch_queue_t);
@@ -100,7 +100,7 @@ void glint_now_playing_stream(void) {
         dispatch_source_set_event_handler(poll, ^{ emitState(); });
         dispatch_resume(poll);
 
-        // Glint sends commands as lines on stdin ("seek <seconds>") and holds it open;
+        // GlintBar sends commands as lines on stdin ("seek <seconds>") and holds it open;
         // when it quits or crashes, the pipe closes and we follow. The read blocks, so it
         // gets a thread of its own.
         [NSThread detachNewThreadWithBlock:^{

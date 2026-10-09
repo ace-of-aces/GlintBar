@@ -2,31 +2,31 @@
 import PackageDescription
 
 let package = Package(
-    name: "Glint",
+    name: "GlintBar",
     platforms: [.macOS("26.0")],
     products: [
-        .executable(name: "Glint", targets: ["Glint"]),
-        .library(name: "GlintNowPlaying", type: .dynamic, targets: ["GlintNowPlaying"]),
+        .executable(name: "GlintBar", targets: ["GlintBar"]),
+        .library(name: "GlintBarNowPlaying", type: .dynamic, targets: ["GlintBarNowPlaying"]),
     ],
     targets: [
-        // Thin Objective-C shim around the private frameworks Glint needs
+        // Thin Objective-C shim around the private frameworks GlintBar needs
         // (DFRFoundation, DisplayServices, CoreBrightness, MediaRemote).
         // Everything is resolved at runtime via dlopen/dlsym so a missing
         // symbol degrades a feature instead of crashing the app at launch.
         .target(
-            name: "GlintPrivate",
-            path: "Sources/GlintPrivate"
+            name: "GlintBarPrivate",
+            path: "Sources/GlintBarPrivate"
         ),
-        // Loaded into /usr/bin/perl by NowPlayingMonitor, never linked into Glint:
+        // Loaded into /usr/bin/perl by NowPlayingMonitor, never linked into GlintBar:
         // MediaRemote only reports playback state to Apple-signed processes.
         .target(
-            name: "GlintNowPlaying",
-            path: "Sources/GlintNowPlaying"
+            name: "GlintBarNowPlaying",
+            path: "Sources/GlintBarNowPlaying"
         ),
         .executableTarget(
-            name: "Glint",
-            dependencies: ["GlintPrivate"],
-            path: "Sources/Glint"
+            name: "GlintBar",
+            dependencies: ["GlintBarPrivate"],
+            path: "Sources/GlintBar"
         ),
     ]
 )

@@ -63,7 +63,7 @@ final class SystemResources {
 /// Takes the readings on a queue of its own: asking how much storage is free (purgeable
 /// space included) alone takes several milliseconds, too long for the main thread.
 private final class Sampler: @unchecked Sendable {
-    private let queue = DispatchQueue(label: "center.julian.glint.resources", qos: .utility)
+    private let queue = DispatchQueue(label: "center.julian.glintbar.resources", qos: .utility)
     private let host = mach_host_self()
     // Only touched on `queue`.
     private var lastCPUTicks: [UInt64]?

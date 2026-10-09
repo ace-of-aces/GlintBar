@@ -1,14 +1,14 @@
 import AppKit
 import UniformTypeIdentifiers
 
-/// The open panel for choosing apps to launch from the Glint bar, shown as a sheet
+/// The open panel for choosing apps to launch from the GlintBar, shown as a sheet
 /// on the customization window.
 @MainActor
 enum AppPicker {
     /// Asks for one or more apps to add.
     static func chooseApps(completion: @escaping @MainActor ([URL]) -> Void) {
         let panel = makePanel(prompt: "Add")
-        panel.message = "Choose apps to launch from the Glint Bar."
+        panel.message = "Choose apps to launch from the GlintBar."
         panel.allowsMultipleSelection = true
         present(panel) { completion(panel.urls) }
     }

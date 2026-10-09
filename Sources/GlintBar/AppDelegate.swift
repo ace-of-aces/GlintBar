@@ -2,16 +2,16 @@ import AppKit
 
 @MainActor
 final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
-    private let bar = GlintBar()
+    private let bar = BarController()
     private var statusItem: NSStatusItem?
     private var reassertTask: Task<Void, Never>?
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         guard TouchBarPrivate.isAvailable else {
             let alert = NSAlert()
-            alert.messageText = "Glint can't control the Touch Bar"
+            alert.messageText = "GlintBar can't control the Touch Bar"
             alert.informativeText =
-                "This version of macOS doesn't provide the Touch Bar interfaces Glint needs."
+                "This version of macOS doesn't provide the Touch Bar interfaces GlintBar needs."
             alert.runModal()
             NSApp.terminate(nil)
             return
@@ -29,10 +29,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     #if DEBUG
         /// Lets the bar be driven without touching it, e.g.:
         /// osascript -l JavaScript -e 'ObjC.import("Foundation"); $.NSDistributedNotificationCenter.defaultCenter
-        ///   .postNotificationNameObjectUserInfoDeliverImmediately("center.julian.Glint.debug", "slider:volume", $(), true)'
+        ///   .postNotificationNameObjectUserInfoDeliverImmediately("center.julian.GlintBar.debug", "slider:volume", $(), true)'
         private func listenForDebugCommands() {
             DistributedNotificationCenter.default().addObserver(
-                forName: .init("center.julian.Glint.debug"), object: nil, queue: .main
+                forName: .init("center.julian.GlintBar.debug"), object: nil, queue: .main
             ) { [weak self] note in
                 let command = note.object as? String ?? ""
                 MainActor.assumeIsolated { self?.bar.debug(command) }
@@ -40,7 +40,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         }
     #endif
 
-    /// Opening Glint.app again while it runs (Finder, Spotlight, `open`) shows the customizer.
+    /// Opening GlintBar.app again while it runs (Finder, Spotlight, `open`) shows the customizer.
     func applicationShouldHandleReopen(_ sender: NSApplication, hasVisibleWindows flag: Bool)
         -> Bool
     {
@@ -132,13 +132,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
                 keyEquivalent: ""
             ).target = self
         } else {
-            menu.addItem(withTitle: "Show Glint", action: #selector(showGlint), keyEquivalent: "")
+            menu.addItem(withTitle: "Show GlintBar", action: #selector(showGlint), keyEquivalent: "")
                 .target = self
         }
         menu.addItem(.separator())
 
         menu.addItem(
-            withTitle: "Customize Glint Bar", action: #selector(customize), keyEquivalent: ","
+            withTitle: "Customize GlintBar", action: #selector(customize), keyEquivalent: ","
         ).target = self
 
         let autoClose = NSMenuItem(title: "Hide Sliders After", action: nil, keyEquivalent: "")
@@ -161,20 +161,20 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         login.state = Settings.launchAtLogin ? .on : .off
         if !Settings.canLaunchAtLogin {
             login.action = nil
-            login.toolTip = "Available when Glint runs from Glint.app"
+            login.toolTip = "Available when GlintBar runs from GlintBar.app"
         }
         menu.addItem(login)
 
         menu.addItem(.separator())
         menu.addItem(
-            withTitle: "Quit Glint", action: #selector(NSApplication.terminate(_:)),
+            withTitle: "Quit GlintBar", action: #selector(NSApplication.terminate(_:)),
             keyEquivalent: "q")
     }
 
     @objc private func showGlint() { bar.showGlint() }
 
     @objc private func customize() {
-        // Show Glint's own bar so changes are visible on the Touch Bar while editing.
+        // Show GlintBar's own bar so changes are visible on the Touch Bar while editing.
         if bar.state != .glint { bar.showGlint() }
         CustomizeWindowController.shared.show()
     }

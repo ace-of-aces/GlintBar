@@ -1,7 +1,7 @@
 import AppKit
 import SwiftUI
 
-/// Hosts `CustomizeView` in a regular window. Glint is a menu bar app, so it
+/// Hosts `CustomizeView` in a regular window. GlintBar is a menu bar app, so it
 /// activates itself to bring the window forward.
 @MainActor
 final class CustomizeWindowController: NSWindowController, NSWindowDelegate {
@@ -9,7 +9,7 @@ final class CustomizeWindowController: NSWindowController, NSWindowDelegate {
 
     private init() {
         let window = NSWindow(contentRect: .zero, styleMask: [.titled, .closable, .fullSizeContentView], backing: .buffered, defer: true)
-        window.title = "Customize Glint Bar"
+        window.title = "Customize GlintBar"
         window.titleVisibility = .hidden
         window.titlebarAppearsTransparent = true
         window.isMovableByWindowBackground = true
@@ -70,7 +70,7 @@ final class CustomizeWindowController: NSWindowController, NSWindowDelegate {
         let create = unsafeBitCast(symbol, to: CreateImage.self)
         // optionIncludingWindow = 1 << 3, boundsIgnoreFraming = 1 << 0, bestResolution = 1 << 3
         guard let image = create(.null, 1 << 3, UInt32(window.windowNumber), 1 << 0 | 1 << 3)?.takeRetainedValue() else {
-            NSLog("Glint: snapshot failed")
+            NSLog("GlintBar: snapshot failed")
             return
         }
         let rep = NSBitmapImageRep(cgImage: image)

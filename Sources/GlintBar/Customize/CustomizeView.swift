@@ -1,7 +1,7 @@
 import SwiftUI
 import UniformTypeIdentifiers
 
-/// Drag-and-drop editor for the Glint bar: a true-to-size replica of the Touch Bar
+/// Drag-and-drop editor for the GlintBar: a true-to-size replica of the Touch Bar
 /// above a palette of every item. Drag items in, along, or out of the bar.
 struct CustomizeView: View {
     var onDone: () -> Void = {}
@@ -45,9 +45,9 @@ struct CustomizeView: View {
 
     private var header: some View {
         VStack(alignment: .leading, spacing: 4) {
-            Text("Customize Glint Bar")
+            Text("Customize GlintBar")
                 .font(.title2.weight(.semibold))
-            Text("Drag and drop items into the bar. Your Glint Bar updates as you go.")
+            Text("Drag and drop items into the bar. Your GlintBar updates as you go.")
                 .foregroundStyle(.secondary)
         }
     }
@@ -57,7 +57,7 @@ struct CustomizeView: View {
     private static let bezelPadding: CGFloat = 8
     private static let touchBarWidth = escWidth + escSpacing + BarMetrics.width + 2 * bezelPadding
 
-    /// The bar as it sits above the keyboard: Esc, then Glint's 1004 pt.
+    /// The bar as it sits above the keyboard: Esc, then GlintBar's 1004 pt.
     private var touchBar: some View {
         HStack(spacing: Self.escSpacing) {
             Text("esc")
@@ -152,7 +152,7 @@ struct CustomizeView: View {
                 Label("Release to remove \(drag.item.kind.title).", systemImage: "minus.circle")
                     .foregroundStyle(.secondary)
             default:
-                Text("Drag items into the Glint Bar, drag them along it to rearrange, and drag them out to remove them. Drop apps from Finder to add them.")
+                Text("Drag items into the GlintBar, drag them along it to rearrange, and drag them out to remove them. Drop apps from Finder to add them.")
                     .foregroundStyle(.secondary)
             }
         }
@@ -202,10 +202,10 @@ struct CustomizeView: View {
         }
         .frame(minWidth: 86)
         .opacity(isUsed || isUnavailable ? 0.38 : 1)
-        .help(isUsed ? "Already in the Glint Bar"
+        .help(isUsed ? "Already in the GlintBar"
             : isUnavailable ? "Not available on this Mac right now"
-            : kind == .app(nil) ? "Click to choose apps to add, or drag into the Glint Bar and pick one. You can also drop apps from Finder onto the bar."
-            : "Drag into the Glint Bar, or click to add it at the end")
+            : kind == .app(nil) ? "Click to choose apps to add, or drag into the GlintBar and pick one. You can also drop apps from Finder onto the bar."
+            : "Drag into the GlintBar, or click to add it at the end")
         .contentShape(Rectangle())
         .onTapGesture {
             if kind == .app(nil) {
@@ -526,7 +526,7 @@ private struct FlowLayout: Layout {
 }
 
 #if DEBUG
-/// Drives `CustomizeView`'s drag logic from debug commands (see `GlintBar.debug`),
+/// Drives `CustomizeView`'s drag logic from debug commands (see `BarController.debug`),
 /// so drag and drop can be exercised and snapshotted without a mouse.
 @MainActor
 @Observable

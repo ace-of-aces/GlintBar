@@ -1,7 +1,7 @@
 import Foundation
 
-/// Tracks whether something is playing, via the GlintNowPlaying helper library
-/// hosted in /usr/bin/perl (see GlintNowPlaying.m for why).
+/// Tracks whether something is playing, via the GlintBarNowPlaying helper library
+/// hosted in /usr/bin/perl (see GlintBarNowPlaying.m for why).
 @MainActor
 final class NowPlayingMonitor {
     static let shared = NowPlayingMonitor()
@@ -78,7 +78,7 @@ final class NowPlayingMonitor {
     func seek(to seconds: Double) {
         guard canSeek, let input else { return }
         let target = min(max(seconds, 0), duration ?? seconds)
-        // Throwing API: a helper that just died must not take Glint down with it.
+        // Throwing API: a helper that just died must not take GlintBar down with it.
         try? input.fileHandleForWriting.write(contentsOf: Data("seek \(target)\n".utf8))
         reportedElapsed = target
         reportedAt = Date()
@@ -87,9 +87,9 @@ final class NowPlayingMonitor {
 
     // MARK: - Helper process
 
-    /// The helper library: inside Glint.app, or next to the executable for `swift run`.
+    /// The helper library: inside GlintBar.app, or next to the executable for `swift run`.
     private static var libraryURL: URL? {
-        let name = "libGlintNowPlaying.dylib"
+        let name = "libGlintBarNowPlaying.dylib"
         let candidates = [
             Bundle.main.privateFrameworksURL?.appendingPathComponent(name),
             Bundle.main.executableURL?.deletingLastPathComponent().appendingPathComponent(name),
@@ -100,7 +100,7 @@ final class NowPlayingMonitor {
     private func launch() {
         guard process == nil, !isStopping else { return }
         guard let library = Self.libraryURL, FileManager.default.isExecutableFile(atPath: Self.perl.path) else {
-            NSLog("Glint: now-playing helper unavailable; play/pause state will be unknown")
+            NSLog("GlintBar: now-playing helper unavailable; play/pause state will be unknown")
             return
         }
 
@@ -134,7 +134,7 @@ final class NowPlayingMonitor {
             self.process = process
             self.input = input
         } catch {
-            NSLog("Glint: couldn't start now-playing helper: \(error)")
+            NSLog("GlintBar: couldn't start now-playing helper: \(error)")
         }
     }
 
@@ -155,7 +155,7 @@ final class NowPlayingMonitor {
         // Back off if the helper keeps dying (e.g. a future macOS closes this path).
         failures += 1
         guard failures <= 5 else {
-            NSLog("Glint: now-playing helper keeps exiting; giving up")
+            NSLog("GlintBar: now-playing helper keeps exiting; giving up")
             return
         }
         Task {
@@ -171,7 +171,7 @@ final class NowPlayingMonitor {
             pending.removeSubrange(pending.startIndex...newline)
             guard let object = try? JSONSerialization.jsonObject(with: line) as? [String: Any] else { continue }
             if let error = object["error"] as? String {
-                NSLog("Glint: now-playing helper: \(error)")
+                NSLog("GlintBar: now-playing helper: \(error)")
                 continue
             }
             failures = 0

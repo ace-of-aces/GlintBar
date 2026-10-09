@@ -1,4 +1,4 @@
-#import "GlintPrivate.h"
+#import "GlintBarPrivate.h"
 #include <dlfcn.h>
 #include <objc/message.h>
 
@@ -16,14 +16,14 @@ static void *GLSymbol(const char *path, const char *symbol) {
 
 // MARK: - Touch Bar
 
-@interface NSTouchBar (GlintPrivate)
+@interface NSTouchBar (GlintBarPrivate)
 + (void)presentSystemModalTouchBar:(NSTouchBar *)touchBar placement:(long long)placement systemTrayItemIdentifier:(nullable NSTouchBarItemIdentifier)identifier;
 + (void)presentSystemModalTouchBar:(NSTouchBar *)touchBar systemTrayItemIdentifier:(nullable NSTouchBarItemIdentifier)identifier;
 + (void)dismissSystemModalTouchBar:(NSTouchBar *)touchBar;
 + (void)minimizeSystemModalTouchBar:(NSTouchBar *)touchBar;
 @end
 
-@interface NSTouchBarItem (GlintPrivate)
+@interface NSTouchBarItem (GlintBarPrivate)
 + (void)addSystemTrayItem:(NSTouchBarItem *)item;
 + (void)removeSystemTrayItem:(NSTouchBarItem *)item;
 @end

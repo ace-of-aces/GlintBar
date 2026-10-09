@@ -6,8 +6,8 @@ enum BarMetrics {
     static let height: CGFloat = 30
 }
 
-/// The whole Glint bar: a row of controls, plus the level panel that pops out of a
-/// level button over it. Everything lives in a single Touch Bar item so Glint fully
+/// The whole GlintBar: a row of controls, plus the level panel that pops out of a
+/// level button over it. Everything lives in a single Touch Bar item so GlintBar fully
 /// controls layout and transitions.
 @MainActor
 final class BarView: NSView {
@@ -56,7 +56,7 @@ final class BarView: NSView {
     }
 }
 
-/// The configurable row of items. Views are owned by `GlintBar`; this view only
+/// The configurable row of items. Views are owned by `BarController`; this view only
 /// shows and positions them according to `BarLayout`.
 @MainActor
 final class MainRowView: NSView {

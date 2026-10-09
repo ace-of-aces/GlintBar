@@ -1,6 +1,6 @@
 import AppKit
 
-/// Everything that can be placed in the Glint bar.
+/// Everything that can be placed in the GlintBar.
 enum BarItemKind: Hashable, Sendable {
     case appControls
     case previousTrack

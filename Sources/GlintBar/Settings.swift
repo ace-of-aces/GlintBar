@@ -10,6 +10,16 @@ enum Settings {
         set { UserDefaults.standard.set(newValue, forKey: autoCloseKey) }
     }
 
+    /// Carries settings over from before the app was renamed from Glint, once.
+    static func migrateFromGlint() {
+        let defaults = UserDefaults.standard
+        guard let bundleID = Bundle.main.bundleIdentifier,
+              defaults.persistentDomain(forName: bundleID)?.isEmpty ?? true,
+              let old = defaults.persistentDomain(forName: "center.julian.Glint"), !old.isEmpty
+        else { return }
+        defaults.setPersistentDomain(old, forName: bundleID)
+    }
+
     static let autoCloseChoices: [Double] = [0, 0.5, 1, 1.5, 2.5, 4]
 
     /// Login items only work from a real .app bundle, not `swift run`.
@@ -27,7 +37,7 @@ enum Settings {
                     try SMAppService.mainApp.unregister()
                 }
             } catch {
-                NSLog("Glint: couldn't update login item: \(error)")
+                NSLog("GlintBar: couldn't update login item: \(error)")
             }
         }
     }

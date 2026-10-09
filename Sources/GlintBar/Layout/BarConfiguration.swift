@@ -1,7 +1,7 @@
 import Foundation
 import Observation
 
-/// The user's arrangement of the Glint bar, saved in user defaults.
+/// The user's arrangement of the GlintBar, saved in user defaults.
 @MainActor
 @Observable
 final class BarConfiguration {
