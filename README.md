@@ -13,7 +13,8 @@
 <p align="center">
     <a href="#features">Features</a> · 
     <a href="#requirements">Requirements</a> · 
-    <a href="#installation">Installation</a>
+    <a href="#installation">Installation</a> · 
+    <a href="#license">License</a>
 </p>
 
 ---
@@ -85,11 +86,47 @@ customization window, choose how quickly sliders close, and turn on launch at lo
 
 - A MacBook Pro with a Touch Bar
 - macOS 26 or later
-- Xcode 26 or later, to build it
+- Xcode 26 or later, only if you build it yourself
 
 ## Installation
 
-Currently, GlintBar must be built from source. Clone the repository, then run:
+### Download
+
+1. Download `GlintBar.dmg` from the
+   [latest release](https://github.com/ace-of-aces/GlintBar/releases/latest) and open it.
+2. Drag `GlintBar.app` onto the Applications folder, then eject the disk image.
+3. Clear the quarantine flag macOS puts on downloaded apps (see below for why):
+
+   ```bash
+   xattr -dr com.apple.quarantine /Applications/GlintBar.app
+   ```
+
+4. Open GlintBar.
+
+To start GlintBar automatically, choose **Launch at Login** from its menu bar item. To update,
+quit GlintBar, drag the newer version over the old one and repeat steps 3 and 4.
+
+#### Why macOS blocks GlintBar
+
+GlintBar isn't signed with an Apple Developer ID or notarized by Apple (it uses private APIs,
+so Apple wouldn't notarize it anyway). It's only ad-hoc signed. Gatekeeper refuses to open
+apps like that when they come from the internet and says GlintBar "can't be opened" or "is
+damaged", but that only refers to the missing signature.
+
+Removing the quarantine flag with the command above tells macOS that you trust this copy. It
+also covers the helper library GlintBar loads for Now Playing, which macOS would otherwise
+block separately.
+
+If you'd rather not use Terminal, open GlintBar once, dismiss the warning, then go to
+**System Settings → Privacy & Security**, scroll down and click **Open Anyway** next to the
+message about GlintBar. If Now Playing doesn't show anything afterwards, use the `xattr`
+command instead.
+
+If you'd rather not trust a prebuilt binary at all, build GlintBar yourself.
+
+### Build from source
+
+You'll need Xcode 26 or later. Clone the repository, then run:
 
 ```bash
 ./scripts/build-app.sh --install
@@ -97,9 +134,8 @@ Currently, GlintBar must be built from source. Clone the repository, then run:
 
 This builds `GlintBar.app`, copies it to `~/Applications` and launches it. Run the same
 command again to update. To only build the app (into `build/GlintBar.app`) without
-installing it, leave off `--install`.
-
-To start GlintBar automatically, choose **Launch at Login** from its menu bar item.
+installing it, leave off `--install`. Apps you build yourself aren't quarantined, so
+Gatekeeper doesn't get in the way.
 
 ## Good to know
 
@@ -111,3 +147,7 @@ all of it.
 
 How GlintBar works, how the project is laid out and how to debug it is covered in the
 [technical documentation](docs/README.md).
+
+## License
+
+GlintBar is available under the [MIT License](LICENSE).
