@@ -97,7 +97,29 @@ BOOL GLDisplayBrightnessSet(CGDirectDisplayID display, float value) {
     return YES;
 }
 
+static void (^brightnessHandler)(void);
+static NSMutableSet<NSNumber *> *observedDisplays;
+
+static void GLBrightnessChanged(CFNotificationCenterRef center, void *observer, CFStringRef name, const void *object, CFDictionaryRef userInfo) {
+    void (^handler)(void) = brightnessHandler;
+    if (handler) handler();
+}
+
+BOOL GLDisplayBrightnessObserve(CGDirectDisplayID display, void (^handler)(void)) {
+    int (*fn)(CGDirectDisplayID, const void *, CFNotificationCallback) = GLSymbol(kDisplayServices, "DisplayServicesRegisterForBrightnessChangeNotifications");
+    if (!fn) return NO;
+    brightnessHandler = handler;
+    if (!observedDisplays) observedDisplays = [NSMutableSet set];
+    if ([observedDisplays containsObject:@(display)]) return YES;
+    if (fn(display, (const void *)(uintptr_t)display, GLBrightnessChanged) != 0) return NO;
+    [observedDisplays addObject:@(display)];
+    return YES;
+}
+
 // MARK: - Keyboard backlight
+//
+// KeyboardBrightnessClient has registerNotificationForKeys:keyboardID:block:, but it
+// doesn't report changes to processes like GlintBar, so the level is polled.
 
 @protocol GLKeyboardBrightnessClient <NSObject>
 - (NSArray<NSNumber *> *)copyKeyboardBacklightIDs;
@@ -164,6 +186,7 @@ typedef struct {
 + (BOOL)supportsBlueLightReduction;
 - (BOOL)getBlueLightStatus:(GLBlueLightStatus *)status;
 - (BOOL)setEnabled:(BOOL)enabled;
+- (void)setStatusNotificationBlock:(void (^)(void))block;
 @end
 
 static id<GLBlueLightClient> GLBlueLight(void) {
@@ -193,6 +216,13 @@ BOOL GLNightShiftIsOn(void) {
 BOOL GLNightShiftSetOn(BOOL on) {
     id<GLBlueLightClient> client = GLBlueLight();
     return client ? [client setEnabled:on] : NO;
+}
+
+BOOL GLNightShiftObserve(void (^handler)(void)) {
+    id<GLBlueLightClient> client = GLBlueLight();
+    if (![client respondsToSelector:@selector(setStatusNotificationBlock:)]) return NO;
+    [client setStatusNotificationBlock:handler];
+    return YES;
 }
 
 // MARK: - Media

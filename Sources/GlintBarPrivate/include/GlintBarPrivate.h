@@ -29,6 +29,10 @@ void GLSetSystemModalShowsCloseBox(BOOL shows);
 
 BOOL GLDisplayBrightnessGet(CGDirectDisplayID display, float *outValue);
 BOOL GLDisplayBrightnessSet(CGDirectDisplayID display, float value);
+/// Calls `handler`, on some other thread, whenever `display`'s brightness changes, whoever
+/// changed it. Every observed display shares the latest `handler`; observing a display
+/// again changes nothing else. Call from the main thread.
+BOOL GLDisplayBrightnessObserve(CGDirectDisplayID display, void (^NS_SWIFT_SENDABLE handler)(void));
 
 // MARK: - Keyboard backlight (CoreBrightness)
 
@@ -41,6 +45,8 @@ BOOL GLKeyboardBrightnessSet(float value);
 BOOL GLNightShiftAvailable(void);
 BOOL GLNightShiftIsOn(void);
 BOOL GLNightShiftSetOn(BOOL on);
+/// Calls `handler`, on some other thread, whenever Night Shift's status changes.
+BOOL GLNightShiftObserve(void (^NS_SWIFT_SENDABLE handler)(void));
 
 // MARK: - Media (MediaRemote)
 

@@ -28,9 +28,10 @@ final class BarController: NSObject, NSTouchBarDelegate {
     private let trayGlyph = TrayGlyphView()
 
     private var isStarted = false
-    /// Picks up what has no change notification (brightness, Night Shift, the clock,
-    /// items coming and going) while the bar can be seen.
+    /// Picks up what has no change notification (see `poll()`) while the bar can be seen.
     private var pollTimer: Timer?
+    /// Turns the clock over on the minute.
+    private var clockTimer: Timer?
     /// Moves the Now Playing line along while something plays.
     private var progressTimer: Timer?
     /// The views of the items on the bar (spacers have none).
@@ -90,6 +91,19 @@ final class BarController: NSObject, NSTouchBarDelegate {
             (self?.itemViews[.systemResources] as? SystemResourcesView)?.update(SystemResources.shared.usage)
         }
         BarConfiguration.shared.onChange = { [weak self] in self?.applyLayout() }
+        DisplayBrightness.onChange = { [weak self] in self?.whileVisible { $0.updateLevels([.display]) } }
+        DisplayBrightness.onDisplaysChange = { [weak self] in
+            self?.whileVisible {
+                $0.updateAvailability()
+                $0.updateLevels([.display])
+            }
+        }
+        NightShift.onChange = { [weak self] in self?.whileVisible { $0.updateNightShift() } }
+        for name in [Notification.Name.NSSystemClockDidChange, .NSSystemTimeZoneDidChange] {
+            NotificationCenter.default.addObserver(forName: name, object: nil, queue: .main) { [weak self] _ in
+                MainActor.assumeIsolated { self?.clockChanged() }
+            }
+        }
         frontmostApp = NSWorkspace.shared.frontmostApplication
         applyLayout()
     }
@@ -98,6 +112,8 @@ final class BarController: NSObject, NSTouchBarDelegate {
 
     func start() {
         TouchBarPrivate.addTrayItem(trayItem)
+        DisplayBrightness.startObserving()
+        NightShift.startObserving()
         NowPlayingMonitor.shared.start()
         Battery.shared.start()
         isStarted = true
@@ -237,7 +253,8 @@ final class BarController: NSObject, NSTouchBarDelegate {
     private func updateActivity() {
         let visible = isVisible
         SystemResources.shared.setNeeded(visible && layoutKinds.contains(.systemResources), by: "bar")
-        setTimer(&pollTimer, running: visible, interval: 1.5) { $0.poll() }
+        setTimer(&pollTimer, running: visible && needsPolling, interval: 1.5) { $0.poll() }
+        setClockRunning(visible && layoutKinds.contains(.clock))
         // A paused track's position doesn't move.
         let isPlaying = NowPlayingMonitor.shared.isPlaying == true
         setTimer(&progressTimer, running: visible && isPlaying && layoutKinds.contains(.nowPlaying), interval: 0.5) {
@@ -259,14 +276,58 @@ final class BarController: NSObject, NSTouchBarDelegate {
         timer?.tolerance = interval / 10
     }
 
-    /// What has no change notification of its own.
+    /// What has no change notification of its own: the keyboard backlight (CoreBrightness
+    /// doesn't report it to other processes), whether the output's volume can be changed,
+    /// and apps that were removed from under their buttons.
     private func poll() {
-        DisplayBrightness.updateBuiltInDisplay()
         AudioController.shared.updateVolumeControl()
         updateAvailability()
-        updateLevels([.keyboard, .display])
-        updateNightShift()
+        updateLevels([.keyboard])
+    }
+
+    /// Whether the configured items include any `poll()` keeps up to date. Hidden items
+    /// count too: polling is how they come back.
+    private var needsPolling: Bool {
+        configuredKinds.contains { kind in
+            guard kind.appURL == nil else { return true }
+            let level = kind.level ?? kind.step?.level
+            return level == .keyboard || level == .volume
+        }
+    }
+
+    /// Runs `update` only while the bar can be seen; `catchUp()` covers the time out of sight.
+    private func whileVisible(_ update: (BarController) -> Void) {
+        if isVisible { update(self) }
+    }
+
+    private func setClockRunning(_ running: Bool) {
+        guard running != (clockTimer != nil) else { return }
+        clockTimer?.invalidate()
+        clockTimer = nil
+        if running { scheduleClockTick() }
+    }
+
+    private func scheduleClockTick() {
+        clockTimer?.invalidate()
+        let minute = (Date().timeIntervalSinceReferenceDate / 60).rounded(.down) * 60
+        // Just past the turn, so the new minute is what's read.
+        let timer = Timer(fire: Date(timeIntervalSinceReferenceDate: minute + 60.05), interval: 0, repeats: false) { [weak self] _ in
+            MainActor.assumeIsolated {
+                guard let self else { return }
+                (self.itemViews[.clock] as? ClockView)?.update()
+                self.scheduleClockTick()
+            }
+        }
+        timer.tolerance = 0.1
+        RunLoop.main.add(timer, forMode: .default)
+        clockTimer = timer
+    }
+
+    /// The clock was set, or the time zone changed: the next minute is somewhere else.
+    private func clockChanged() {
+        guard clockTimer != nil else { return }
         (itemViews[.clock] as? ClockView)?.update()
+        scheduleClockTick()
     }
 
     /// Brings everything up to date after a time out of sight.
@@ -301,8 +362,13 @@ final class BarController: NSObject, NSTouchBarDelegate {
     }
 
     private var visibleKinds: [BarItemKind] {
+        configuredKinds.filter(\.isAvailable)
+    }
+
+    /// What the bar would show if everything were available.
+    private var configuredKinds: [BarItemKind] {
         let configuration = BarConfiguration.shared
-        return (configuration.previewKinds ?? configuration.kinds).filter(\.isAvailable)
+        return configuration.previewKinds ?? configuration.kinds
     }
 
     private func makeItemView(_ kind: BarItemKind) -> NSView {

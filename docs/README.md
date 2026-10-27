@@ -83,9 +83,9 @@ missing symbol disables a feature instead of crashing the app.
 | Feature | API |
 | --- | --- |
 | System-wide bar, Control Strip button | `NSTouchBar presentSystemModalTouchBar:…`, `DFRElementSetControlStripPresenceForIdentifier` (DFRFoundation) |
-| Display brightness | `DisplayServicesGetBrightness` / `SetBrightness` (DisplayServices) |
+| Display brightness | `DisplayServicesGetBrightness` / `SetBrightness`, `DisplayServicesRegisterForBrightnessChangeNotifications` (DisplayServices) |
 | Keyboard backlight | `KeyboardBrightnessClient` (CoreBrightness) |
-| Night Shift | `CBBlueLightClient` (CoreBrightness) |
+| Night Shift | `CBBlueLightClient`, including its status notification block (CoreBrightness) |
 | Show Desktop | `CoreDockSendNotification` (HIServices) |
 | Spotlight, Quick Actions | The distributed notifications Apple's Control Strip posts |
 | Media commands | `MRMediaRemoteSendCommand` (MediaRemote) |
@@ -95,6 +95,16 @@ missing symbol disables a feature instead of crashing the app.
 | System Resources | Mach host statistics, the GPU's IOKit `PerformanceStatistics`, volume capacity (all public) |
 
 Because of these APIs GlintBar can't ship on the Mac App Store, and a macOS update can break it.
+
+### Keeping up to date
+
+Display brightness, Night Shift, displays coming and going, volume, battery and now playing
+all report their changes. The clock turns over on the minute. What doesn't report changes
+is polled every 1.5 s, and only while the configured bar has an item that needs it: the
+keyboard backlight (`KeyboardBrightnessClient` has a notification API, but it reports nothing
+to GlintBar), whether the audio output's volume can be changed, and whether an app button's
+app still exists. All of it pauses while the bar can't be seen (screens asleep, another user's
+session in front, app controls showing) and catches up when it can again.
 
 ### Now Playing
 

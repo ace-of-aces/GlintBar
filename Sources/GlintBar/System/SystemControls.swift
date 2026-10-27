@@ -96,11 +96,35 @@ enum Level: CaseIterable {
 @MainActor
 enum DisplayBrightness {
     /// The internal panel, or nil in clamshell mode. Finding it asks the window server, so
-    /// it's kept; `updateBuiltInDisplay()` looks again.
+    /// it's kept; `updateBuiltInDisplay()` looks again, as does every change of displays.
     private(set) static var builtInDisplay = findBuiltInDisplay()
+
+    /// Called when the built-in panel's brightness changes, whoever changed it (the keys,
+    /// Control Center, auto-brightness, GlintBar itself).
+    static var onChange: (() -> Void)?
+    /// Called after displays came or went (the lid closed or opened, a screen plugged in).
+    static var onDisplaysChange: (() -> Void)?
 
     static func updateBuiltInDisplay() {
         builtInDisplay = findBuiltInDisplay()
+        guard let builtInDisplay else { return }
+        GLDisplayBrightnessObserve(builtInDisplay) {
+            DispatchQueue.main.async { MainActor.assumeIsolated { onChange?() } }
+        }
+    }
+
+    static func startObserving() {
+        CGDisplayRegisterReconfigurationCallback({ _, flags, _ in
+            // Each change is reported once as it begins and once per display after.
+            guard !flags.contains(.beginConfigurationFlag) else { return }
+            DispatchQueue.main.async {
+                MainActor.assumeIsolated {
+                    DisplayBrightness.updateBuiltInDisplay()
+                    DisplayBrightness.onDisplaysChange?()
+                }
+            }
+        }, nil)
+        updateBuiltInDisplay()
     }
 
     private static func findBuiltInDisplay() -> CGDirectDisplayID? {
@@ -127,6 +151,15 @@ enum DisplayBrightness {
 enum NightShift {
     static var isAvailable: Bool { GLNightShiftAvailable() }
     static var isOn: Bool { GLNightShiftIsOn() }
+
+    /// Called when Night Shift turns on or off, by schedule or by hand.
+    static var onChange: (() -> Void)?
+
+    static func startObserving() {
+        GLNightShiftObserve {
+            DispatchQueue.main.async { MainActor.assumeIsolated { onChange?() } }
+        }
+    }
 
     static func toggle() {
         GLNightShiftSetOn(!isOn)
