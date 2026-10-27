@@ -1,10 +1,12 @@
 #!/usr/bin/env bash
-# Builds build/GlintBar.app. Pass --install to also copy it to ~/Applications and launch it.
+# Builds build/GlintBar.app as a universal binary (Touch Bar Macs include Intel models).
+# Pass --install to also copy it to ~/Applications and launch it.
 set -euo pipefail
 cd "$(dirname "$0")/.."
 
-swift build -c release
-BIN_DIR="$(swift build -c release --show-bin-path)"
+ARCHS=(--arch arm64 --arch x86_64)
+swift build -c release "${ARCHS[@]}"
+BIN_DIR="$(swift build -c release "${ARCHS[@]}" --show-bin-path)"
 APP=build/GlintBar.app
 
 rm -rf "$APP"

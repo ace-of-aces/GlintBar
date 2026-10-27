@@ -36,8 +36,22 @@ Requires Xcode 26+ and macOS 26+.
 ./scripts/build-app.sh --install  # also copies it to ~/Applications and launches it
 ```
 
-The script builds in release mode, assembles the bundle (copying `libGlintBarNowPlaying.dylib`
-into `Contents/Frameworks`) and ad-hoc signs it.
+The script builds a universal (arm64 and x86_64) release binary, assembles the bundle (copying
+`libGlintBarNowPlaying.dylib` into `Contents/Frameworks`) and ad-hoc signs it.
+`./scripts/make-dmg.sh` then packages it into `build/GlintBar.dmg`.
+
+### Releases
+
+Pushing a version tag publishes a release:
+
+```bash
+git tag v0.2.0 && git push origin v0.2.0
+```
+
+The [release workflow](../.github/workflows/release.yml) sets `CFBundleShortVersionString`
+from the tag and `CFBundleVersion` from the run number, builds the DMG and attaches it, with its
+SHA-256 checksum, to a new GitHub release with generated notes. The DMG is only ad-hoc signed,
+not notarized; the main README tells users how to get past Gatekeeper.
 
 For quick iteration, run it without a bundle:
 

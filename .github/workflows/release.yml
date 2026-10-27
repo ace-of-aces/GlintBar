@@ -1,0 +1,33 @@
+# Publishes a GitHub release with GlintBar.dmg for every pushed version tag (v1.2.3).
+# The version in Info.plist is taken from the tag, so it doesn't need bumping by hand.
+name: Release
+
+on:
+  push:
+    tags: ["v*"]
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: macos-26
+    steps:
+      - uses: actions/checkout@v7
+      - name: Set version
+        run: |
+          plist=Resources/Info.plist
+          /usr/libexec/PlistBuddy -c "Set :CFBundleShortVersionString ${GITHUB_REF_NAME#v}" "$plist"
+          /usr/libexec/PlistBuddy -c "Set :CFBundleVersion $GITHUB_RUN_NUMBER" "$plist"
+      - name: Build
+        run: ./scripts/build-app.sh
+      - name: Package
+        run: |
+          ./scripts/make-dmg.sh
+          cd build && shasum -a 256 GlintBar.dmg > GlintBar.dmg.sha256
+      - name: Publish
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release create "$GITHUB_REF_NAME" build/GlintBar.dmg build/GlintBar.dmg.sha256 \
+            --title "GlintBar ${GITHUB_REF_NAME#v}" --generate-notes
