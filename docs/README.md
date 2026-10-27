@@ -55,8 +55,23 @@ swift test
 
 The tests in [`Tests/GlintBarTests`](../Tests/GlintBarTests) cover what runs without the
 Touch Bar: item layout, saving and loading layouts, the customization window's drop rules and
-reading the now-playing helper's output. CI ([`.github/workflows/ci.yml`](../.github/workflows/ci.yml)) builds and tests every
+reading the now-playing helper's output. CI ([`.github/workflows/ci.yml`](../.github/workflows/ci.yml)) checks formatting, builds and tests every
 push to `main` and every pull request.
+
+### Formatting
+
+The Swift code is formatted with `swift format`, which comes with Xcode. Its rules are in
+[`.swift-format`](../.swift-format): Apple's defaults, adjusted to the code's own style
+(4-space indents, 120-column lines, no extra indent inside `#if`).
+
+```bash
+./scripts/format.sh          # formats Sources, Tests and Package.swift in place
+./scripts/format.sh --check  # only reports problems; this is what CI runs
+```
+
+The check is strict, so any formatting difference fails CI. Run `./scripts/format.sh` before
+committing, then fix by hand whatever `--check` still reports (lint rules such as naming that
+the formatter doesn't fix).
 
 ### Icons
 

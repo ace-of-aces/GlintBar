@@ -13,7 +13,7 @@ jobs:
     steps:
       - uses: actions/checkout@v7
       - name: Lint
-        run: swift format lint --recursive --parallel --strict Sources Tests Package.swift
+        run: ./scripts/format.sh --check
       - name: Build
         run: swift build -c release
       - name: Test
