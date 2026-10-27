@@ -17,6 +17,13 @@ final class NowPlayingMonitor {
     /// Where the player last said it was.
     private var playhead: Playhead?
 
+    /// Whether anything shows the state right now. While nothing does, the helper stops
+    /// its poll (change notifications still come through) and catches up once it's
+    /// watched again.
+    var isWatched = true {
+        didSet { if isWatched != oldValue { sendWatchState() } }
+    }
+
     private var process: Process?
     private var input: Pipe?
     private var pending = LineBuffer()
@@ -71,13 +78,22 @@ final class NowPlayingMonitor {
     func seek(to seconds: Double) {
         guard canSeek, let input else { return }
         let target = min(max(seconds, 0), duration ?? seconds)
-        // Throwing API: a helper that just died must not take GlintBar down with it.
-        try? input.fileHandleForWriting.write(contentsOf: Data("seek \(target)\n".utf8))
+        send("seek \(target)", to: input)
         playhead = Playhead(elapsed: target, at: Date(), rate: playhead?.rate ?? (isPlaying == true ? 1 : 0))
         onChange?()
     }
 
     // MARK: - Helper process
+
+    private func sendWatchState() {
+        guard let input else { return }
+        send(isWatched ? "poll on" : "poll off", to: input)
+    }
+
+    private func send(_ command: String, to input: Pipe) {
+        // Throwing API: a helper that just died must not take GlintBar down with it.
+        try? input.fileHandleForWriting.write(contentsOf: Data("\(command)\n".utf8))
+    }
 
     /// The helper library: inside GlintBar.app, or next to the executable for `swift run`.
     private static var libraryURL: URL? {
@@ -125,6 +141,7 @@ final class NowPlayingMonitor {
             try process.run()
             self.process = process
             self.input = input
+            if !isWatched { sendWatchState() } // a new helper polls
         } catch {
             NSLog("GlintBar: couldn't start now-playing helper: \(error)")
         }

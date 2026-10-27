@@ -114,8 +114,11 @@ session in front, app controls showing) and catches up when it can again.
 Since macOS 15.4, MediaRemote tells third-party processes that nothing is playing.
 [`NowPlayingMonitor`](../Sources/GlintBar/System/NowPlayingMonitor.swift) therefore loads
 `libGlintBarNowPlaying.dylib` into the Apple-signed `/usr/bin/perl`, which is still allowed to
-ask, and reads its state changes as JSON lines from its stdout. Seek requests go the other way,
-as lines on the helper's stdin. The helper exits when GlintBar's end of that pipe closes.
+ask, and reads its state changes as JSON lines from its stdout. Commands go the other way, as
+lines on the helper's stdin: seek requests, and `poll off` / `poll on`, which stop the
+helper's safety-net poll while nothing shows playback (MediaRemote's change notifications
+still come through) and catch up as soon as something does again. The helper exits when
+GlintBar's end of that pipe closes.
 
 ## Debug commands
 

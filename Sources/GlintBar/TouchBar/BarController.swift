@@ -153,6 +153,7 @@ final class BarController: NSObject, NSTouchBarDelegate {
         SystemResources.shared.setNeeded(visible && layoutKinds.contains(.systemResources), by: "bar")
         setTimer(&pollTimer, running: visible && needsPolling, interval: 1.5) { $0.poll() }
         setClockRunning(visible && layoutKinds.contains(.clock))
+        NowPlayingMonitor.shared.isWatched = visible && (layoutKinds.contains(.nowPlaying) || layoutKinds.contains(.playPause))
         // A paused track's position doesn't move.
         let isPlaying = NowPlayingMonitor.shared.isPlaying == true
         setTimer(&progressTimer, running: visible && isPlaying && layoutKinds.contains(.nowPlaying), interval: 0.5) {

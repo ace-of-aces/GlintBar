@@ -5,7 +5,8 @@
 // Since macOS 15.4 MediaRemote answers now-playing queries from third-party processes
 // with "nothing is playing". This library runs inside /usr/bin/perl, which is
 // Apple-signed and may still ask, and relays the answers to GlintBar over stdout.
-// Commands that need the same standing (seeking) come back over stdin.
+// Commands come back over stdin: seeking, which needs the same standing, and turning the
+// safety-net poll off while GlintBar shows nothing of it.
 
 typedef void (*MRRegisterForNotificationsFn)(dispatch_queue_t);
 typedef void (*MRIsPlayingFn)(dispatch_queue_t, void (^)(Boolean));
@@ -17,6 +18,9 @@ static MRNowPlayingInfoFn nowPlayingInfoFn;
 static MRSetElapsedTimeFn setElapsedTimeFn;
 static dispatch_queue_t queue;
 static NSData *lastLine;
+/// Re-reads the state every few seconds, for notifications that never arrive.
+static dispatch_source_t poll;
+static BOOL isPollPaused;
 
 static void writeLine(NSDictionary *payload) {
     // dataWithJSONObject: throws (and takes the helper down) on anything JSON can't hold.
@@ -98,15 +102,17 @@ void glint_now_playing_stream(void) {
         }
 
         // Safety net for notifications that never arrive.
-        static dispatch_source_t poll;
         poll = dispatch_source_create(DISPATCH_SOURCE_TYPE_TIMER, 0, 0, queue);
         dispatch_source_set_timer(poll, DISPATCH_TIME_NOW, 3 * NSEC_PER_SEC, NSEC_PER_SEC / 2);
         dispatch_source_set_event_handler(poll, ^{ emitState(); });
         dispatch_resume(poll);
 
-        // GlintBar sends commands as lines on stdin ("seek <seconds>") and holds it open;
-        // when it quits or crashes, the pipe closes and we follow. The read blocks, so it
-        // gets a thread of its own.
+        // GlintBar sends commands as lines on stdin and holds it open; when it quits or
+        // crashes, the pipe closes and we follow. The read blocks, so it gets a thread of
+        // its own.
+        //   seek <seconds>   jumps to that position
+        //   poll off         stops the poll while GlintBar shows nothing of it
+        //   poll on          starts it again and reports the state right away
         [NSThread detachNewThreadWithBlock:^{
             char *line = NULL;
             size_t capacity = 0;
@@ -116,6 +122,20 @@ void glint_now_playing_stream(void) {
                     dispatch_async(queue, ^{
                         setElapsedTimeFn(seconds);
                         emitState();
+                    });
+                } else if (strcmp(line, "poll off\n") == 0) {
+                    dispatch_async(queue, ^{
+                        if (isPollPaused) return;
+                        isPollPaused = YES;
+                        dispatch_suspend(poll);
+                    });
+                } else if (strcmp(line, "poll on\n") == 0) {
+                    dispatch_async(queue, ^{
+                        if (!isPollPaused) return;
+                        isPollPaused = NO;
+                        dispatch_resume(poll);
+                        // Ticks right away: whatever the poll would have caught meanwhile.
+                        dispatch_source_set_timer(poll, DISPATCH_TIME_NOW, 3 * NSEC_PER_SEC, NSEC_PER_SEC / 2);
                     });
                 }
             }
