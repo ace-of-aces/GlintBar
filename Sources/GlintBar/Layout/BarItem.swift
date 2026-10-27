@@ -38,14 +38,49 @@ enum BarItemKind: Hashable, Sendable {
     case space
     case flexibleSpace
 
-    /// How the item is saved, e.g. `volume` or `app:/Applications/Safari.app`.
+    /// How the item is saved, e.g. `volume` or `app:/Applications/Safari.app`. Spelled
+    /// out rather than derived from the case names, so renaming a case can't lose it
+    /// from anyone's saved layout.
     var rawValue: String {
         switch self {
+        case .appControls: "appControls"
+        case .previousTrack: "previousTrack"
+        case .playPause: "playPause"
+        case .nextTrack: "nextTrack"
+        case .nowPlaying: "nowPlaying"
+        case .keyboardBrightness: "keyboardBrightness"
+        case .keyboardBrightnessDown: "keyboardBrightnessDown"
+        case .keyboardBrightnessUp: "keyboardBrightnessUp"
+        case .displayBrightness: "displayBrightness"
+        case .displayBrightnessDown: "displayBrightnessDown"
+        case .displayBrightnessUp: "displayBrightnessUp"
+        case .nightShift: "nightShift"
+        case .volume: "volume"
+        case .volumeDown: "volumeDown"
+        case .volumeUp: "volumeUp"
+        case .mute: "mute"
+        case .screenshot: "screenshot"
+        case .missionControl: "missionControl"
+        case .apps: "apps"
+        case .spotlight: "spotlight"
+        case .showDesktop: "showDesktop"
+        case .inputSources: "inputSources"
+        case .quickActions: "quickActions"
+        case .lockScreen: "lockScreen"
+        case .screenSaver: "screenSaver"
+        case .sleep: "sleep"
+        case .siri: "siri"
+        case .clock: "clock"
+        case .battery: "battery"
+        case .systemResources: "systemResources"
         case .app(let url): Self.appPrefix + (url?.path ?? "")
-        default: String(describing: self)
+        case .space: "space"
+        case .flexibleSpace: "flexibleSpace"
         }
     }
 
+    /// Reads back what `rawValue` saved. Anything the palette offers can be read back,
+    /// so an item can't be added and then vanish at the next launch.
     init?(rawValue: String) {
         if rawValue.hasPrefix(Self.appPrefix) {
             let path = rawValue.dropFirst(Self.appPrefix.count)
@@ -53,19 +88,11 @@ enum BarItemKind: Hashable, Sendable {
             self = .launching(URL(fileURLWithPath: String(path)))
             return
         }
-        guard let kind = Self.simpleKinds.first(where: { $0.rawValue == rawValue }) else { return nil }
+        guard let kind = PaletteSection.all.lazy.flatMap(\.kinds).first(where: { $0.appURL == nil && $0.rawValue == rawValue }) else { return nil }
         self = kind
     }
 
     private static let appPrefix = "app:"
-    private static let simpleKinds: [BarItemKind] = [
-        .appControls, .previousTrack, .playPause, .nextTrack, .nowPlaying,
-        .keyboardBrightness, .keyboardBrightnessDown, .keyboardBrightnessUp,
-        .displayBrightness, .displayBrightnessDown, .displayBrightnessUp, .nightShift,
-        .volume, .volumeDown, .volumeUp, .mute, .screenshot, .missionControl, .apps, .spotlight,
-        .showDesktop, .inputSources, .quickActions, .lockScreen, .screenSaver, .sleep, .siri, .clock,
-        .battery, .systemResources, .space, .flexibleSpace,
-    ]
 
     var title: String {
         switch self {
@@ -230,6 +257,28 @@ struct BarItem: Identifiable, Hashable, Sendable {
         self.id = id
         self.kind = kind
     }
+}
+
+/// Every item a bar can hold, grouped as the customization palette shows them.
+struct PaletteSection {
+    let title: String
+    let kinds: [BarItemKind]
+
+    static let all = [
+        PaletteSection(title: "Media", kinds: [.previousTrack, .playPause, .nextTrack, .nowPlaying]),
+        PaletteSection(title: "Sound", kinds: [.volume, .volumeDown, .volumeUp, .mute]),
+        PaletteSection(title: "Light", kinds: [
+            .displayBrightness, .displayBrightnessDown, .displayBrightnessUp,
+            .keyboardBrightness, .keyboardBrightnessDown, .keyboardBrightnessUp, .nightShift,
+        ]),
+        PaletteSection(title: "Spacing", kinds: [.space, .flexibleSpace]),
+        PaletteSection(title: "System", kinds: [
+            .appControls, .siri, .spotlight, .missionControl, .apps, .showDesktop, .inputSources, .quickActions,
+        ]),
+        PaletteSection(title: "Your Apps", kinds: [.app(nil)]),
+        PaletteSection(title: "Status", kinds: [.clock, .battery, .systemResources]),
+        PaletteSection(title: "Session", kinds: [.screenshot, .screenSaver, .lockScreen, .sleep]),
+    ]
 }
 
 /// Positions items along the bar. Shared by the real Touch Bar and the customization

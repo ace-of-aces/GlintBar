@@ -495,27 +495,6 @@ private struct PaletteTileGuide: ViewModifier {
     }
 }
 
-private struct PaletteSection {
-    let title: String
-    let kinds: [BarItemKind]
-
-    static let all = [
-        PaletteSection(title: "Media", kinds: [.previousTrack, .playPause, .nextTrack, .nowPlaying]),
-        PaletteSection(title: "Sound", kinds: [.volume, .volumeDown, .volumeUp, .mute]),
-        PaletteSection(title: "Light", kinds: [
-            .displayBrightness, .displayBrightnessDown, .displayBrightnessUp,
-            .keyboardBrightness, .keyboardBrightnessDown, .keyboardBrightnessUp, .nightShift,
-        ]),
-        PaletteSection(title: "Spacing", kinds: [.space, .flexibleSpace]),
-        PaletteSection(title: "System", kinds: [
-            .appControls, .siri, .spotlight, .missionControl, .apps, .showDesktop, .inputSources, .quickActions,
-        ]),
-        PaletteSection(title: "Your Apps", kinds: [.app(nil)]),
-        PaletteSection(title: "Status", kinds: [.clock, .battery, .systemResources]),
-        PaletteSection(title: "Session", kinds: [.screenshot, .screenSaver, .lockScreen, .sleep]),
-    ]
-}
-
 /// Lays subviews out left to right, starting a new row when the next one
 /// wouldn't fit the proposed width.
 private struct FlowLayout: Layout {
