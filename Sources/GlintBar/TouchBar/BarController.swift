@@ -372,6 +372,12 @@ final class BarController: NSObject, NSTouchBarDelegate {
     }
 
     private func makeItemView(_ kind: BarItemKind) -> NSView {
+        let view = makeUnlabeledItemView(kind)
+        if let button = view as? GlassButton { button.setAccessibilityLabel(kind.level?.title ?? kind.title) }
+        return view
+    }
+
+    private func makeUnlabeledItemView(_ kind: BarItemKind) -> NSView {
         switch kind {
         case .nowPlaying:
             let view = NowPlayingView(width: kind.width)
@@ -400,10 +406,7 @@ final class BarController: NSObject, NSTouchBarDelegate {
         }
         if let step = kind.step {
             button.repeatsWhileHeld = true
-            button.onTap = { [weak self] in
-                step.level.step(step.direction)
-                self?.updateLevels([step.level])
-            }
+            button.onTap = { [weak self] in self?.step(step.level, by: step.direction) }
             return button
         }
         button.onTap = { [weak self] in
@@ -436,6 +439,11 @@ final class BarController: NSObject, NSTouchBarDelegate {
         return button
     }
 
+    private func step(_ level: Level, by direction: Float) {
+        level.step(direction)
+        updateLevels([level])
+    }
+
     private static func togglePlayback() {
         Media.send(.togglePlayPause)
         NowPlayingMonitor.shared.assumeToggled()
@@ -445,6 +453,8 @@ final class BarController: NSObject, NSTouchBarDelegate {
     /// it straight away, and the same touch keeps dragging the knob (relative to where
     /// it is, so nothing jumps).
     private func wireLevelButton(_ button: GlassButton, level: Level) {
+        button.onIncrement = { [weak self] in self?.step(level, by: 1) }
+        button.onDecrement = { [weak self] in self?.step(level, by: -1) }
         button.onTouchDown = { [weak self, weak button] x in
             guard let self, let button else { return }
             self.openPanel(.level(level), from: button)
@@ -492,7 +502,7 @@ final class BarController: NSObject, NSTouchBarDelegate {
                 level.set(value)
                 // Shown from the value just set: reading it back would ask another process
                 // on every move. Volume changes also come back through AudioController.
-                (self.itemViews[level.kind] as? GlassButton)?.setSymbol(level.symbol(for: value))
+                (self.itemViews[level.kind] as? GlassButton)?.showLevel(level, value: value)
             case .media?:
                 // Only show where the song would jump to; seek once the finger lifts.
                 self.updateTimeLabels(position: Double(value) * (NowPlayingMonitor.shared.duration ?? 0))
@@ -512,8 +522,11 @@ final class BarController: NSObject, NSTouchBarDelegate {
     // MARK: - Slider panel
 
     private func openPanel(_ content: PanelContent, from anchor: NSView) {
+        let slider = barView.panel.slider
         switch content {
         case .level(let level):
+            slider.setAccessibilityLabel(level.title)
+            slider.describeValue = GlassSlider.percentText
             barView.openPanel(
                 from: anchor, placement: .besideAnchor,
                 leading: .symbol(level.lowSymbol, size: 13), trailing: .symbol(level.highSymbol, size: 15),
@@ -522,6 +535,12 @@ final class BarController: NSObject, NSTouchBarDelegate {
         case .media:
             let nowPlaying = NowPlayingMonitor.shared
             let position = nowPlaying.position() ?? 0
+            slider.setAccessibilityLabel("Playback Position")
+            // E.g. "1:23 of 3:45".
+            slider.describeValue = { value in
+                let duration = NowPlayingMonitor.shared.duration ?? 0
+                return "\(Self.timeText(Double(value) * duration)) of \(Self.timeText(duration))"
+            }
             barView.openPanel(
                 from: anchor, placement: .overAnchor,
                 leading: .text(Self.timeText(position)),
@@ -641,7 +660,7 @@ final class BarController: NSObject, NSTouchBarDelegate {
             // Mid-drag the button already shows the dragged value.
             if isOpen, barView.panel.slider.isTracking { continue }
             let value = level.value
-            button?.setSymbol(level.symbol(for: value))
+            button?.showLevel(level, value: value)
             if isOpen { barView.panel.slider.setValue(value) }
         }
     }
@@ -665,7 +684,9 @@ final class BarController: NSObject, NSTouchBarDelegate {
         case false?: "play.fill"
         case nil: "playpause.fill"
         }
-        (itemViews[.playPause] as? GlassButton)?.setSymbol(playSymbol)
+        let playPause = itemViews[.playPause] as? GlassButton
+        playPause?.setSymbol(playSymbol)
+        playPause?.setAccessibilityValue(NowPlayingMonitor.shared.isPlaying.map { $0 ? "Playing" : "Paused" })
         updatePlaybackProgress()
     }
 
@@ -685,10 +706,19 @@ final class BarController: NSObject, NSTouchBarDelegate {
     }
 
     private func showFrontmostApp(on button: GlassButton) {
+        button.setAccessibilityValue(frontmostApp?.localizedName)
         guard let icon = frontmostApp?.icon else {
             button.setSymbol("app.dashed")
             return
         }
         button.setImage(BarItemKind.buttonIcon(icon))
+    }
+}
+
+private extension GlassButton {
+    /// A level button's icon and spoken value at `value`.
+    func showLevel(_ level: Level, value: Float) {
+        setSymbol(level.symbol(for: value))
+        setAccessibilityValue(GlassSlider.percentText(value))
     }
 }

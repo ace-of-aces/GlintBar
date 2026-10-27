@@ -12,8 +12,19 @@ final class GlassButton: NSView {
     var onTouchMoved: ((CGFloat) -> Void)?
     var onTouchUp: (() -> Void)?
 
-    /// When true the glass is tinted to show an "on" state (e.g. muted).
-    var isActive = false { didSet { if isActive != oldValue { updateTint() } } }
+    /// When true the glass is tinted to show an "on" state (e.g. muted). VoiceOver reads it
+    /// as on or off once it has been set.
+    var isActive = false {
+        didSet {
+            setAccessibilityValue(isActive ? "On" : "Off")
+            if isActive != oldValue { updateTint() }
+        }
+    }
+
+    /// VoiceOver's increment and decrement. Setting them makes the button read as a slider
+    /// (a level button, whose own slider only shows while a finger is on it).
+    var onIncrement: (() -> Void)?
+    var onDecrement: (() -> Void)?
 
     /// Calls `onTap` as soon as the finger lands, then repeatedly while it stays down,
     /// like the keyboard's volume and brightness keys.
@@ -73,6 +84,46 @@ final class GlassButton: NSView {
     func setImage(_ image: NSImage?) {
         symbol = nil
         imageView.image = image
+    }
+
+    // MARK: - Accessibility
+    //
+    // The owner sets the label: an icon alone tells VoiceOver nothing.
+
+    override func isAccessibilityElement() -> Bool { true }
+    /// The icon would only repeat the label.
+    override func accessibilityChildren() -> [Any]? { [] }
+
+    override func accessibilityRole() -> NSAccessibility.Role? {
+        onIncrement == nil ? .button : .slider
+    }
+
+    override func isAccessibilitySelectorAllowed(_ selector: Selector) -> Bool {
+        switch selector {
+        case #selector(accessibilityPerformIncrement): onIncrement != nil
+        case #selector(accessibilityPerformDecrement): onDecrement != nil
+        default: super.isAccessibilitySelectorAllowed(selector)
+        }
+    }
+
+    override func accessibilityPerformPress() -> Bool {
+        if let onTouchDown {
+            onTouchDown(bounds.midX)
+            onTouchUp?()
+        } else {
+            onTap?()
+        }
+        return true
+    }
+
+    override func accessibilityPerformIncrement() -> Bool {
+        onIncrement?()
+        return onIncrement != nil
+    }
+
+    override func accessibilityPerformDecrement() -> Bool {
+        onDecrement?()
+        return onDecrement != nil
     }
 
     // MARK: - Touches

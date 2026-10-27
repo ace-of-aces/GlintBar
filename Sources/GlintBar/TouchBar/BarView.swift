@@ -155,6 +155,7 @@ final class SliderPanelView: NSView {
         background.cornerRadius = BarMetrics.height / 2
         slider.trackInset = Self.trackInset
         closeButton.alphaValue = 0
+        closeButton.setAccessibilityLabel("Close")
         [background, leading, trailing, slider, closeButton].forEach(addSubview)
         reveal.backgroundColor = NSColor.black.cgColor
         reveal.cornerRadius = BarMetrics.height / 2
@@ -317,6 +318,9 @@ private final class AccessoryView: NSView {
 
     @available(*, unavailable)
     required init?(coder: NSCoder) { fatalError() }
+
+    /// The slider's value says it all.
+    override func accessibilityChildren() -> [Any]? { [] }
 
     func show(_ accessory: PanelAccessory, small: Bool) {
         switch accessory {

@@ -14,6 +14,16 @@ enum ResourceMeter: CaseIterable {
         }
     }
 
+    /// The meter's name for VoiceOver.
+    var spokenLabel: String {
+        switch self {
+        case .cpu: "CPU"
+        case .gpu: "GPU"
+        case .memory: "Memory"
+        case .storage: "Storage"
+        }
+    }
+
     var color: NSColor {
         switch self {
         case .cpu: .systemBlue
@@ -47,6 +57,7 @@ enum ResourceMeter: CaseIterable {
 final class SystemResourcesView: NSView {
     private let meters = ResourceMeter.allCases.map { MeterView($0) }
     private let width: CGFloat
+    private var usage = SystemResources.Usage()
 
     init(width: CGFloat) {
         self.width = width
@@ -70,7 +81,20 @@ final class SystemResourcesView: NSView {
         }
     }
 
+    override func isAccessibilityElement() -> Bool { true }
+    override func accessibilityRole() -> NSAccessibility.Role? { .staticText }
+    override func accessibilityLabel() -> String? { "System Resources" }
+    override func accessibilityChildren() -> [Any]? { [] }
+
+    /// E.g. "CPU 12 %, GPU 3 %, Memory 61 %, Storage 70 %", leaving out what isn't known yet.
+    override func accessibilityValue() -> Any? {
+        ResourceMeter.allCases.compactMap { meter in
+            meter.value(in: usage).map { "\(meter.spokenLabel) \(GlassSlider.percentText(Float($0)))" }
+        }.joined(separator: ", ")
+    }
+
     func update(_ usage: SystemResources.Usage) {
+        self.usage = usage
         for meter in meters { meter.show(meter.meter.value(in: usage)) }
     }
 }

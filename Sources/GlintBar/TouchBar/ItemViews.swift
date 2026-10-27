@@ -101,6 +101,22 @@ final class NowPlayingView: NSView {
         CATransaction.commit()
     }
 
+    // MARK: - Accessibility
+
+    override func isAccessibilityElement() -> Bool { true }
+    override func accessibilityRole() -> NSAccessibility.Role? { .button }
+    override func accessibilityLabel() -> String? { "Now Playing" }
+    override func accessibilityChildren() -> [Any]? { [] }
+
+    override func accessibilityValue() -> Any? {
+        artist.isHidden ? title.stringValue : "\(title.stringValue), \(artist.stringValue)"
+    }
+
+    override func accessibilityPerformPress() -> Bool {
+        onTap?()
+        return true
+    }
+
     // MARK: - Touches
 
     override func touchesBegan(with event: NSEvent) {
@@ -191,6 +207,12 @@ final class ClockView: NSView {
 
     override var intrinsicContentSize: NSSize { NSSize(width: width, height: BarMetrics.height) }
 
+    override func isAccessibilityElement() -> Bool { true }
+    override func accessibilityRole() -> NSAccessibility.Role? { .staticText }
+    override func accessibilityLabel() -> String? { "Clock" }
+    override func accessibilityChildren() -> [Any]? { [] }
+    override func accessibilityValue() -> Any? { label.stringValue }
+
     func update() {
         let text = Self.text(for: Date())
         if label.stringValue != text { label.stringValue = text }
@@ -230,6 +252,18 @@ final class BatteryView: NSView {
     required init?(coder: NSCoder) { fatalError() }
 
     override var intrinsicContentSize: NSSize { NSSize(width: width, height: BarMetrics.height) }
+
+    override func isAccessibilityElement() -> Bool { true }
+    override func accessibilityRole() -> NSAccessibility.Role? { .staticText }
+    override func accessibilityLabel() -> String? { "Battery" }
+    override func accessibilityChildren() -> [Any]? { [] }
+
+    override func accessibilityValue() -> Any? {
+        guard let shown else { return nil }
+        let text = Self.text(for: shown)
+        if shown.isCharging { return "\(text), charging" }
+        return shown.isOnPower ? "\(text), on power" : text
+    }
 
     func update() {
         guard let state = Battery.shared.state, state != shown else { return }

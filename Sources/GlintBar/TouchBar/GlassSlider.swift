@@ -19,6 +19,14 @@ final class GlassSlider: NSView {
 
     var trackInset: CGFloat = 0 { didSet { needsLayout = true } }
 
+    /// How VoiceOver reads `value`.
+    var describeValue: (Float) -> String = GlassSlider.percentText
+
+    /// `value` as a whole percentage, e.g. 45 %.
+    nonisolated static func percentText(_ value: Float) -> String {
+        Double(value).formatted(.percent.precision(.fractionLength(0)))
+    }
+
     /// Finger-to-knob offset kept while dragging, so the knob never jumps under the finger.
     private var grabOffset: CGFloat = 0
     private var liquidTask: Task<Void, Never>?
@@ -120,6 +128,29 @@ final class GlassSlider: NSView {
         liquidTask?.cancel()
         setLiquid(false)
         onTouchEnded?()
+    }
+
+    // MARK: - Accessibility
+
+    override func isAccessibilityElement() -> Bool { true }
+    override func accessibilityRole() -> NSAccessibility.Role? { .slider }
+    override func accessibilityValue() -> Any? { describeValue(value) }
+
+    override func accessibilityPerformIncrement() -> Bool { nudge(by: 1) }
+    override func accessibilityPerformDecrement() -> Bool { nudge(by: -1) }
+
+    /// Moves the knob a 16th of the track, reported like a short drag.
+    private func nudge(by notches: Float) -> Bool {
+        guard !isTracking else { return false }
+        onTouchBegan?()
+        let newValue = Self.clamp(value + notches / 16)
+        if newValue != value {
+            value = newValue
+            layoutParts()
+            onChange?(value)
+        }
+        onTouchEnded?()
+        return true
     }
 
     // MARK: - Touches landing on the slider itself

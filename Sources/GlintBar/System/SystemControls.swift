@@ -36,6 +36,15 @@ enum Level: CaseIterable {
         }
     }
 
+    /// What VoiceOver calls the level.
+    var title: String {
+        switch self {
+        case .keyboard: "Keyboard Brightness"
+        case .display: "Display Brightness"
+        case .volume: "Volume"
+        }
+    }
+
     /// The bar item showing this level as a slider.
     var kind: BarItemKind {
         switch self {
