@@ -11,9 +11,6 @@ if let bundleID = Bundle.main.bundleIdentifier,
 // Writing to the now-playing helper's pipe after it exited must fail, not kill us.
 signal(SIGPIPE, SIG_IGN)
 
-// Before anything reads the defaults.
-Settings.migrateFromGlint()
-
 let delegate = AppDelegate()
 app.delegate = delegate
 app.setActivationPolicy(.accessory)

@@ -23,37 +23,3 @@ struct LevelStepTests {
         #expect(Level.stepped(0.52, by: -1) == 7.0 / 16)
     }
 }
-
-/// Uses throwaway defaults domains, removed again afterwards.
-@Suite(.serialized)
-struct MigrationTests {
-    private let defaults = UserDefaults.standard
-    private let newID = "center.julian.GlintBarTests.new.\(UUID().uuidString)"
-    private let oldID = "center.julian.GlintBarTests.old.\(UUID().uuidString)"
-
-    private func cleanUp() {
-        defaults.removePersistentDomain(forName: newID)
-        defaults.removePersistentDomain(forName: oldID)
-    }
-
-    @Test func carriesOldSettingsOver() {
-        defer { cleanUp() }
-        defaults.setPersistentDomain(["barLayout": ["volume"]], forName: oldID)
-        Settings.migrateFromGlint(defaults: defaults, bundleID: newID, oldBundleID: oldID)
-        #expect(defaults.persistentDomain(forName: newID)?["barLayout"] as? [String] == ["volume"])
-    }
-
-    @Test func leavesExistingSettingsAlone() {
-        defer { cleanUp() }
-        defaults.setPersistentDomain(["barLayout": ["volume"]], forName: oldID)
-        defaults.setPersistentDomain(["barLayout": ["mute"]], forName: newID)
-        Settings.migrateFromGlint(defaults: defaults, bundleID: newID, oldBundleID: oldID)
-        #expect(defaults.persistentDomain(forName: newID)?["barLayout"] as? [String] == ["mute"])
-    }
-
-    @Test func doesNothingWithoutOldSettings() {
-        defer { cleanUp() }
-        Settings.migrateFromGlint(defaults: defaults, bundleID: newID, oldBundleID: oldID)
-        #expect(defaults.persistentDomain(forName: newID) == nil)
-    }
-}

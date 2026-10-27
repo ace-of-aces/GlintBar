@@ -10,19 +10,6 @@ enum Settings {
         set { UserDefaults.standard.set(newValue, forKey: autoCloseKey) }
     }
 
-    /// Carries settings over from before the app was renamed from Glint, once.
-    static func migrateFromGlint(
-        defaults: UserDefaults = .standard,
-        bundleID: String? = Bundle.main.bundleIdentifier,
-        oldBundleID: String = "center.julian.Glint"
-    ) {
-        guard let bundleID,
-              defaults.persistentDomain(forName: bundleID)?.isEmpty ?? true,
-              let old = defaults.persistentDomain(forName: oldBundleID), !old.isEmpty
-        else { return }
-        defaults.setPersistentDomain(old, forName: bundleID)
-    }
-
     static let autoCloseChoices: [Double] = [0, 0.5, 1, 1.5, 2.5, 4]
 
     /// Login items only work from a real .app bundle, not `swift run`.

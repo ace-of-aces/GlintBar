@@ -19,8 +19,6 @@ codesign --force --sign - "$APP"
 echo "Built $APP"
 
 if [[ "${1:-}" == "--install" ]]; then
-    # Glint is this app under its old name; both can't own the Touch Bar.
-    pkill -x Glint 2>/dev/null && sleep 0.5 || true
     pkill -x GlintBar 2>/dev/null && sleep 0.5 || true
     mkdir -p ~/Applications
     rm -rf ~/Applications/GlintBar.app

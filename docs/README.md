@@ -51,9 +51,9 @@ swift test
 ```
 
 The tests in [`Tests/GlintBarTests`](../Tests/GlintBarTests) cover what runs without the
-Touch Bar: item layout, saving and loading layouts, reading the now-playing helper's output,
-and the settings migration. CI ([`.github/workflows/ci.yml`](../.github/workflows/ci.yml))
-builds and tests every push to `main` and every pull request.
+Touch Bar: item layout, saving and loading layouts, and reading the now-playing helper's
+output. CI ([`.github/workflows/ci.yml`](../.github/workflows/ci.yml)) builds and tests every
+push to `main` and every pull request.
 
 ### Icons
 
