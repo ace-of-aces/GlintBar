@@ -102,7 +102,7 @@ struct CustomizeView: View {
         .animation(.spring(duration: 0.32, bounce: 0.15), value: entries.map(\.layoutKey))
     }
 
-    private func barItem(_ entry: Entry) -> some View {
+    private func barItem(_ entry: BarEntry) -> some View {
         let item = entry.item
         let showsRemove = hovered == item.id && drag == nil
         return ItemPreview(kind: item.kind, width: entry.frame.width)
@@ -271,16 +271,6 @@ struct CustomizeView: View {
 
     // MARK: - Dragging
 
-    struct DragSession {
-        enum Source { case bar, palette }
-        var item: BarItem
-        var source: Source
-        /// Pointer location in the window's coordinate space.
-        var location: CGPoint
-        /// Pointer offset from the item's centre, so the item doesn't jump under it.
-        var grabOffset: CGSize
-    }
-
     private func dragGesture(item: BarItem, source: DragSession.Source, center: @escaping () -> CGPoint) -> some Gesture {
         DragGesture(minimumDistance: 3, coordinateSpace: .named(Self.space))
             .onChanged { value in
@@ -313,7 +303,7 @@ struct CustomizeView: View {
         withAnimation(.spring(duration: 0.32, bounce: 0.15)) {
             switch outcome {
             case .insert(let index):
-                var items = baseItems(for: drag)
+                var items = dropTarget.items(without: drag)
                 items.insert(drag.item, at: index)
                 configuration.setItems(items)
             case .remove:
@@ -326,35 +316,13 @@ struct CustomizeView: View {
         configuration.previewKinds = nil
     }
 
-    /// What letting go of the dragged item would do.
-    enum DropOutcome: Equatable {
-        case insert(at: Int)
-        /// Over the bar, but there's no room for it.
-        case blocked
-        /// A bar item dragged off the bar.
-        case remove
-        /// A palette item dragged off the bar.
-        case cancel
+    private var dropTarget: BarDropTarget {
+        BarDropTarget(items: configuration.items, barFrame: barFrame, barSize: barSize)
     }
 
-    private func outcome(of drag: DragSession) -> DropOutcome {
-        // The bar's hit area for drops; generous vertically so it's easy to aim for.
-        guard barFrame.insetBy(dx: -16, dy: -40).contains(drag.location) else {
-            return drag.source == .bar ? .remove : .cancel
-        }
-        let base = baseItems(for: drag).map(\.kind)
-        guard BarLayout.fits(base + [drag.item.kind], in: barSize.width) else { return .blocked }
-        let centerX = drag.location.x - drag.grabOffset.width - barFrame.minX
-        let frames = BarLayout.frames(for: base, in: barSize)
-        return .insert(at: frames.firstIndex { $0.midX > centerX } ?? base.count)
-    }
+    private func outcome(of drag: DragSession) -> DropOutcome { dropTarget.outcome(of: drag) }
 
     private var dropOutcome: DropOutcome? { drag.map(outcome(of:)) }
-
-    /// The bar's items without the one being dragged.
-    private func baseItems(for drag: DragSession) -> [BarItem] {
-        configuration.items.filter { $0.id != drag.item.id }
-    }
 
     private var isAdding: Bool {
         if case .insert? = dropOutcome { true } else { false }
@@ -373,43 +341,8 @@ struct CustomizeView: View {
 
     // MARK: - Displayed bar
 
-    struct Entry: Identifiable {
-        let item: BarItem
-        var frame: CGRect
-        var isPlaceholder = false
-        /// The dragged item while it's off the bar: kept (invisibly) so its view and
-        /// gesture survive.
-        var isHidden = false
-        var id: BarItem.ID { item.id }
-        var layoutKey: String { "\(item.id)\(frame.minX)\(frame.width)" }
-    }
-
     /// The bar as it would look if the current drag ended now.
-    var displayedEntries: [Entry] {
-        var entries = configuration.items.map { Entry(item: $0, frame: .zero) }
-        if let drag {
-            let original = entries.firstIndex { $0.id == drag.item.id }
-            entries.removeAll { $0.id == drag.item.id }
-            if case .insert(let index) = outcome(of: drag) {
-                entries.insert(Entry(item: drag.item, frame: .zero, isPlaceholder: true), at: index)
-            } else if let original {
-                entries.insert(Entry(item: drag.item, frame: .zero, isHidden: true), at: original)
-            }
-        }
-        let visible = entries.filter { !$0.isHidden }
-        let frames = BarLayout.frames(for: visible.map(\.item.kind), in: barSize)
-        var x: CGFloat = 0
-        var next = frames.makeIterator()
-        for index in entries.indices {
-            if entries[index].isHidden {
-                entries[index].frame = CGRect(x: x, y: 0, width: 0, height: barSize.height)
-            } else if let frame = next.next() {
-                entries[index].frame = frame
-                x = frame.maxX
-            }
-        }
-        return entries
-    }
+    var displayedEntries: [BarEntry] { dropTarget.entries(during: drag) }
 
     /// What the real Touch Bar shows during a drag: the would-be result.
     private var hardwarePreview: [BarItemKind]? {
@@ -471,116 +404,3 @@ struct CustomizeView: View {
         }
     }
 }
-
-private extension HorizontalAlignment {
-    private enum PaletteTile: AlignmentID {
-        static func defaultValue(in d: ViewDimensions) -> CGFloat { d[.leading] }
-    }
-
-    /// The leading edge of a section's first tile box, which its title aligns to.
-    static let paletteTile = HorizontalAlignment(PaletteTile.self)
-}
-
-/// Sets the `.paletteTile` guide on a section's first tile only: an `HStack`
-/// averages the guides its children set explicitly.
-private struct PaletteTileGuide: ViewModifier {
-    let boxWidth: CGFloat?
-
-    func body(content: Content) -> some View {
-        if let boxWidth {
-            content.alignmentGuide(.paletteTile) { max(0, ($0.width - boxWidth) / 2) }
-        } else {
-            content
-        }
-    }
-}
-
-/// Lays subviews out left to right, starting a new row when the next one
-/// wouldn't fit the proposed width.
-private struct FlowLayout: Layout {
-    var horizontalSpacing: CGFloat
-    var verticalSpacing: CGFloat
-
-    func sizeThatFits(proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) -> CGSize {
-        let frames = frames(for: subviews, width: proposal.width ?? .infinity)
-        let union = frames.reduce(CGRect.zero) { $0.union($1) }
-        return CGSize(width: union.maxX, height: union.maxY)
-    }
-
-    func placeSubviews(in bounds: CGRect, proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) {
-        for (subview, frame) in zip(subviews, frames(for: subviews, width: bounds.width)) {
-            subview.place(at: CGPoint(x: bounds.minX + frame.minX, y: bounds.minY + frame.minY), proposal: ProposedViewSize(frame.size))
-        }
-    }
-
-    private func frames(for subviews: Subviews, width: CGFloat) -> [CGRect] {
-        var frames: [CGRect] = []
-        var origin = CGPoint.zero
-        var rowHeight: CGFloat = 0
-        for subview in subviews {
-            let size = subview.sizeThatFits(.unspecified)
-            if origin.x > 0, origin.x + size.width > width {
-                origin = CGPoint(x: 0, y: origin.y + rowHeight + verticalSpacing)
-                rowHeight = 0
-            }
-            frames.append(CGRect(origin: origin, size: size))
-            origin.x += size.width + horizontalSpacing
-            rowHeight = max(rowHeight, size.height)
-        }
-        return frames
-    }
-}
-
-#if DEBUG
-/// Drives `CustomizeView`'s drag logic from debug commands (see `BarController.debug`),
-/// so drag and drop can be exercised and snapshotted without a mouse.
-@MainActor
-@Observable
-final class CustomizeDebugDriver {
-    enum Step {
-        case pickUpBarItem(index: Int)
-        case pickUpPaletteItem(BarItemKind)
-        /// x in bar coordinates.
-        case moveOverBar(x: CGFloat)
-        case moveOffBar
-        case drop
-    }
-
-    static let shared = CustomizeDebugDriver()
-    private(set) var pending: [Step] = []
-    private(set) var generation = 0
-
-    func perform(_ step: Step) {
-        pending.append(step)
-        generation += 1
-    }
-
-    func takeSteps() -> [Step] {
-        defer { pending = [] }
-        return pending
-    }
-}
-
-extension CustomizeView {
-    func runDebugSteps() {
-        for step in CustomizeDebugDriver.shared.takeSteps() {
-            switch step {
-            case .pickUpBarItem(let index):
-                let entries = displayedEntries
-                guard entries.indices.contains(index) else { continue }
-                let center = CGPoint(x: barFrame.minX + entries[index].frame.midX, y: barFrame.midY)
-                drag = DragSession(item: entries[index].item, source: .bar, location: center, grabOffset: .zero)
-            case .pickUpPaletteItem(let kind):
-                let frame = tileFrames[kind] ?? .zero
-                drag = DragSession(item: BarItem(kind), source: .palette, location: CGPoint(x: frame.midX, y: frame.midY), grabOffset: .zero)
-            case .moveOverBar(let x):
-                drag?.location = CGPoint(x: barFrame.minX + x, y: barFrame.midY)
-            case .moveOffBar:
-                drag?.location = CGPoint(x: barFrame.midX, y: barFrame.maxY + 160)
-            case .drop:
-                finishDrag()
-            }
-        }
-    }
-}
-#endif

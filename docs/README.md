@@ -16,11 +16,14 @@ GlintBar is a Swift package (`Package.swift`) with three targets, plus tests:
 Inside `Sources/GlintBar`:
 
 - `TouchBar/`: the bar itself. [`BarController`](../Sources/GlintBar/TouchBar/BarController.swift)
-  presents it and handles item actions; [`BarView`](../Sources/GlintBar/TouchBar/BarView.swift)
-  draws and lays out everything; the glass buttons, sliders and item views live next to it.
+  presents it, handles item actions and keeps items up to date;
+  [`SliderPanelController`](../Sources/GlintBar/TouchBar/SliderPanelController.swift) runs the
+  sliders that pop out of items; [`BarView`](../Sources/GlintBar/TouchBar/BarView.swift) draws
+  and lays out everything; the glass buttons, sliders and item views live next to it.
 - `Layout/`: the item catalog ([`BarItem`](../Sources/GlintBar/Layout/BarItem.swift)) and the
   saved arrangement ([`BarConfiguration`](../Sources/GlintBar/Layout/BarConfiguration.swift)).
-- `Customize/`: the drag-and-drop customization window.
+- `Customize/`: the drag-and-drop customization window. Its drop rules are in
+  [`BarDropTarget`](../Sources/GlintBar/Customize/BarDropTarget.swift), apart from the view.
 - `System/`: audio, brightness, battery, system resources, now playing and other system actions.
 - `Icons/`: glyphs drawn in code (the eclipse logo, the battery).
 
@@ -51,8 +54,8 @@ swift test
 ```
 
 The tests in [`Tests/GlintBarTests`](../Tests/GlintBarTests) cover what runs without the
-Touch Bar: item layout, saving and loading layouts, and reading the now-playing helper's
-output. CI ([`.github/workflows/ci.yml`](../.github/workflows/ci.yml)) builds and tests every
+Touch Bar: item layout, saving and loading layouts, the customization window's drop rules and
+reading the now-playing helper's output. CI ([`.github/workflows/ci.yml`](../.github/workflows/ci.yml)) builds and tests every
 push to `main` and every pull request.
 
 ### Icons

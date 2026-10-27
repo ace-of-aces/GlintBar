@@ -7,7 +7,7 @@ struct TimeTextTests {
         (0.0, "0:00"), (7.9, "0:07"), (187, "3:07"), (3599, "59:59"), (3753, "1:02:33"), (-4, "0:00"),
     ])
     func formats(seconds: Double, text: String) {
-        #expect(BarController.timeText(seconds) == text)
+        #expect(SliderPanelController.timeText(seconds) == text)
     }
 }
 
