@@ -88,13 +88,12 @@ BOOL GLDisplayBrightnessGet(CGDirectDisplayID display, float *outValue) {
     return fn ? fn(display, outValue) == 0 : NO;
 }
 
+/// CoreBrightness tells the rest of the system (Control Center, other apps) about the change
+/// itself. (`DisplayServicesBrightnessChanged`, which used to be needed for that, is gone
+/// since macOS 26.)
 BOOL GLDisplayBrightnessSet(CGDirectDisplayID display, float value) {
     int (*fn)(CGDirectDisplayID, float) = GLSymbol(kDisplayServices, "DisplayServicesSetBrightness");
-    if (!fn || fn(display, value) != 0) return NO;
-    // Lets the rest of the system (Control Center, ambient adaptation) know about the change.
-    void (*changed)(CGDirectDisplayID, double) = GLSymbol(kDisplayServices, "DisplayServicesBrightnessChanged");
-    if (changed) changed(display, value);
-    return YES;
+    return fn && fn(display, value) == 0;
 }
 
 static void (^brightnessHandler)(void);
