@@ -152,14 +152,14 @@ final class NowPlayingMonitor {
         onChange?()
         guard !isStopping else { return }
 
-        // Back off if the helper keeps dying (e.g. a future macOS closes this path).
+        // Back off if the helper keeps dying (e.g. a future macOS closes this path), but
+        // never give up for good: whatever kills it may pass, like a player that stops.
         failures += 1
-        guard failures <= 5 else {
-            NSLog("GlintBar: now-playing helper keeps exiting; giving up")
-            return
+        if failures == 6 {
+            NSLog("GlintBar: now-playing helper keeps exiting; retrying every minute")
         }
         Task {
-            try? await Task.sleep(for: .seconds(Double(failures * failures)))
+            try? await Task.sleep(for: .seconds(Double(min(failures * failures, 60))))
             launch()
         }
     }

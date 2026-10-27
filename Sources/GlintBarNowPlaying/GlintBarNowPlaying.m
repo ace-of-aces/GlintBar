@@ -19,6 +19,8 @@ static dispatch_queue_t queue;
 static NSData *lastLine;
 
 static void writeLine(NSDictionary *payload) {
+    // dataWithJSONObject: throws (and takes the helper down) on anything JSON can't hold.
+    if (![NSJSONSerialization isValidJSONObject:payload]) return;
     NSData *json = [NSJSONSerialization dataWithJSONObject:payload options:0 error:nil];
     if (!json || [json isEqualToData:lastLine]) return;
     lastLine = json;
@@ -32,9 +34,11 @@ static NSString *stringValue(NSDictionary *info, NSString *key) {
     return [value isKindOfClass:NSString.class] ? value : nil;
 }
 
+/// Players may report infinity (web players do for live streams) or NaN; JSON holds
+/// neither, so those count as not reported.
 static NSNumber *numberValue(NSDictionary *info, NSString *key) {
     id value = info[key];
-    return [value isKindOfClass:NSNumber.class] ? value : nil;
+    return [value isKindOfClass:NSNumber.class] && isfinite([value doubleValue]) ? value : nil;
 }
 
 /// Reads the current state and writes it if it changed. Runs on `queue`.
