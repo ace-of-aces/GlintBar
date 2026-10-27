@@ -42,15 +42,18 @@ The script builds a universal (arm64 and x86_64) release binary, assembles the b
 
 ### Releases
 
-Pushing a version tag publishes a release:
+Publish a release on GitHub with a new version tag (e.g. `v0.2.0`) targeting `main`, without
+attaching any files. Publishing pushes the tag, which runs the
+[release workflow](../.github/workflows/release.yml): it sets `CFBundleShortVersionString` from
+the tag and `CFBundleVersion` from the run number, builds the DMG and attaches it, with its
+SHA-256 checksum, to the release a few minutes later.
+
+Pushing just a tag also works; the workflow then creates the release itself, with generated
+notes:
 
 ```bash
 git tag v0.2.0 && git push origin v0.2.0
-```
-
-The [release workflow](../.github/workflows/release.yml) sets `CFBundleShortVersionString`
-from the tag and `CFBundleVersion` from the run number, builds the DMG and attaches it, with its
-SHA-256 checksum, to a new GitHub release with generated notes. The DMG is only ad-hoc signed,
+``` The DMG is only ad-hoc signed,
 not notarized; the main README tells users how to get past Gatekeeper.
 
 For quick iteration, run it without a bundle:

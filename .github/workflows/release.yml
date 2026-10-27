@@ -1,4 +1,6 @@
-# Publishes a GitHub release with GlintBar.dmg for every pushed version tag (v1.2.3).
+# Attaches GlintBar.dmg to the release for every pushed version tag (v1.2.3). Publishing a
+# release on GitHub pushes its tag, so the DMG is added to that release a few minutes later;
+# pushing just a tag creates the release with generated notes.
 # The version in Info.plist is taken from the tag, so it doesn't need bumping by hand.
 name: Release
 
@@ -29,5 +31,10 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          gh release create "$GITHUB_REF_NAME" build/GlintBar.dmg build/GlintBar.dmg.sha256 \
-            --title "GlintBar ${GITHUB_REF_NAME#v}" --generate-notes
+          files=(build/GlintBar.dmg build/GlintBar.dmg.sha256)
+          if gh release view "$GITHUB_REF_NAME" > /dev/null 2>&1; then
+            gh release upload "$GITHUB_REF_NAME" "${files[@]}" --clobber
+          else
+            gh release create "$GITHUB_REF_NAME" "${files[@]}" \
+              --title "GlintBar ${GITHUB_REF_NAME#v}" --generate-notes
+          fi

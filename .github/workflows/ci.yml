@@ -1,5 +1,4 @@
-# Builds GlintBar and runs its tests. macOS runners bill at 10× the Linux rate on
-# private repositories, so this only runs for pushes to main and pull requests.
+# Builds GlintBar and runs its tests.
 name: CI
 
 on:
