@@ -32,7 +32,9 @@ extension BarController {
         case "scrub":
             // scrub:down · scrub:move:<bar x> · scrub:up — a finger on the Now Playing widget.
             guard let view = itemViews[.nowPlaying] as? NowPlayingView else { return }
-            let x = parts.count > 2 ? view.convert(NSPoint(x: Double(parts[2]) ?? 0, y: 0), from: barView).x : view.bounds.midX
+            let x =
+                parts.count > 2
+                ? view.convert(NSPoint(x: Double(parts[2]) ?? 0, y: 0), from: barView).x : view.bounds.midX
             switch parts.count > 1 ? parts[1] : "" {
             case "down": view.onScrubBegan?(x)
             case "move": view.onScrubMoved?(x)
@@ -45,27 +47,37 @@ extension BarController {
             // battery:<percent>[:charging|:power] fakes the battery; battery:real undoes it.
             let percent = parts.count > 1 ? Int(parts[1]) : nil
             let power = parts.count > 2 ? parts[2] : ""
-            Battery.shared.debugOverride(percent.map {
-                Battery.State(percent: $0, isCharging: power == "charging", isOnPower: power == "charging" || power == "power")
-            })
+            Battery.shared.debugOverride(
+                percent.map {
+                    Battery.State(
+                        percent: $0, isCharging: power == "charging", isOnPower: power == "charging" || power == "power"
+                    )
+                })
         case "resources":
             // resources:<cpu>:<gpu>:<memory>:<storage> in percent fakes the readings; resources:real undoes it.
             let percents = parts.dropFirst().map { Double($0).map { $0 / 100 } }
-            SystemResources.shared.debugOverride(percents.count == 4 ? SystemResources.Usage(
-                cpu: percents[0], gpu: percents[1], memory: percents[2], storage: percents[3]
-            ) : nil)
+            SystemResources.shared.debugOverride(
+                percents.count == 4
+                    ? SystemResources.Usage(
+                        cpu: percents[0], gpu: percents[1], memory: percents[2], storage: percents[3]
+                    ) : nil)
         case "customize": CustomizeWindowController.shared.show()
         case "cdrag":
             // cdrag:bar:<index> · cdrag:palette:<kind> · cdrag:to:<bar x> · cdrag:off · cdrag:drop
             let driver = CustomizeDebugDriver.shared
             switch parts.count > 1 ? parts[1] : "" {
             case "bar": driver.perform(.pickUpBarItem(index: Int(parts[2]) ?? 0))
-            case "palette": (parts[2] == "app" ? .app(nil) : BarItemKind(rawValue: parts[2])).map { driver.perform(.pickUpPaletteItem($0)) }
+            case "palette":
+                (parts[2] == "app" ? .app(nil) : BarItemKind(rawValue: parts[2])).map {
+                    driver.perform(.pickUpPaletteItem($0))
+                }
             case "to": driver.perform(.moveOverBar(x: CGFloat(Double(parts[2]) ?? 0)))
             case "off": driver.perform(.moveOffBar)
             default: driver.perform(.drop)
             }
-        case "snapshot": CustomizeWindowController.shared.debugSnapshot(to: parts.count > 1 ? parts[1...].joined(separator: ":") : "/tmp/glint-customize.png")
+        case "snapshot":
+            CustomizeWindowController.shared.debugSnapshot(
+                to: parts.count > 1 ? parts[1...].joined(separator: ":") : "/tmp/glint-customize.png")
         case "close": panel.close()
         case "appControls": showAppControls()
         case "glint": showGlint()

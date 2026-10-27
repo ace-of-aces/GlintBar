@@ -1,5 +1,6 @@
 import Foundation
 import Testing
+
 @testable import GlintBar
 
 struct NowPlayingTests {
@@ -11,11 +12,16 @@ struct NowPlayingTests {
     }
 
     @Test func readsAState() {
-        let line = Data(#"{"playing":true,"title":"Song","artist":"Band","duration":200,"elapsed":12.5,"rate":1,"timestamp":1000}"#.utf8)
-        #expect(NowPlayingReport(line: line) == .state(.init(
-            isPlaying: true, title: "Song", artist: "Band", duration: 200,
-            playhead: Playhead(elapsed: 12.5, at: Date(timeIntervalSince1970: 1000), rate: 1)
-        )))
+        let line = Data(
+            #"{"playing":true,"title":"Song","artist":"Band","duration":200,"elapsed":12.5,"rate":1,"timestamp":1000}"#
+                .utf8)
+        #expect(
+            NowPlayingReport(line: line)
+                == .state(
+                    .init(
+                        isPlaying: true, title: "Song", artist: "Band", duration: 200,
+                        playhead: Playhead(elapsed: 12.5, at: Date(timeIntervalSince1970: 1000), rate: 1)
+                    )))
     }
 
     @Test func missingRateAndTimestampFollowThePlayState() {
@@ -31,7 +37,9 @@ struct NowPlayingTests {
     }
 
     @Test func readsErrorsAndSkipsGarbage() {
-        #expect(NowPlayingReport(line: Data(#"{"error":"MediaRemote unavailable"}"#.utf8)) == .error("MediaRemote unavailable"))
+        #expect(
+            NowPlayingReport(line: Data(#"{"error":"MediaRemote unavailable"}"#.utf8))
+                == .error("MediaRemote unavailable"))
         #expect(NowPlayingReport(line: Data("not json".utf8)) == nil)
         #expect(NowPlayingReport(line: Data("[1,2]".utf8)) == nil)
     }
@@ -47,8 +55,14 @@ struct NowPlayingTests {
 
     @Test func positionStaysWithinTheTrack() {
         let start = Date(timeIntervalSince1970: 0)
-        #expect(Playhead(elapsed: 98, at: start, rate: 1).position(at: start.addingTimeInterval(5), isPlaying: true, duration: 100) == 100)
-        #expect(Playhead(elapsed: 2, at: start, rate: -1).position(at: start.addingTimeInterval(5), isPlaying: true, duration: 100) == 0)
-        #expect(Playhead(elapsed: 2, at: start, rate: 1).position(at: start.addingTimeInterval(5), isPlaying: true, duration: nil) == 7)
+        #expect(
+            Playhead(elapsed: 98, at: start, rate: 1).position(
+                at: start.addingTimeInterval(5), isPlaying: true, duration: 100) == 100)
+        #expect(
+            Playhead(elapsed: 2, at: start, rate: -1).position(
+                at: start.addingTimeInterval(5), isPlaying: true, duration: 100) == 0)
+        #expect(
+            Playhead(elapsed: 2, at: start, rate: 1).position(
+                at: start.addingTimeInterval(5), isPlaying: true, duration: nil) == 7)
     }
 }

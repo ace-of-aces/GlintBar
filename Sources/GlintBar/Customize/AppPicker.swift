@@ -16,7 +16,8 @@ enum AppPicker {
     /// Asks for the app that replaces `current`.
     static func chooseReplacement(for current: URL, completion: @escaping @MainActor (URL) -> Void) {
         let panel = makePanel(prompt: "Choose")
-        panel.message = "Choose the app this button launches instead of \(FileManager.default.displayName(atPath: current.path))."
+        panel.message =
+            "Choose the app this button launches instead of \(FileManager.default.displayName(atPath: current.path))."
         panel.directoryURL = current.deletingLastPathComponent()
         present(panel) { panel.url.map(completion) }
     }

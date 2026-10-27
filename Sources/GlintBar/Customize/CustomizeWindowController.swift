@@ -8,7 +8,8 @@ final class CustomizeWindowController: NSWindowController, NSWindowDelegate {
     static let shared = CustomizeWindowController()
 
     private init() {
-        let window = NSWindow(contentRect: .zero, styleMask: [.titled, .closable, .fullSizeContentView], backing: .buffered, defer: true)
+        let window = NSWindow(
+            contentRect: .zero, styleMask: [.titled, .closable, .fullSizeContentView], backing: .buffered, defer: true)
         window.title = "Customize GlintBar"
         window.titleVisibility = .hidden
         window.titlebarAppearsTransparent = true
@@ -54,10 +55,11 @@ final class CustomizeWindowController: NSWindowController, NSWindowDelegate {
         guard let screen = NSScreen.main ?? window.screen ?? NSScreen.screens.first else { return }
         let visible = screen.visibleFrame
         let size = window.frame.size
-        window.setFrameOrigin(NSPoint(
-            x: (visible.midX - size.width / 2).rounded(),
-            y: max(visible.minY, (visible.midY - size.height / 2).rounded())
-        ))
+        window.setFrameOrigin(
+            NSPoint(
+                x: (visible.midX - size.width / 2).rounded(),
+                y: max(visible.minY, (visible.midY - size.height / 2).rounded())
+            ))
     }
 
     #if DEBUG
@@ -66,10 +68,13 @@ final class CustomizeWindowController: NSWindowController, NSWindowDelegate {
     /// in current SDKs, hence the lookup.)
     func debugSnapshot(to path: String) {
         typealias CreateImage = @convention(c) (CGRect, UInt32, UInt32, UInt32) -> Unmanaged<CGImage>?
-        guard let window, let symbol = dlsym(UnsafeMutableRawPointer(bitPattern: -2), "CGWindowListCreateImage") else { return }
+        guard let window, let symbol = dlsym(UnsafeMutableRawPointer(bitPattern: -2), "CGWindowListCreateImage") else {
+            return
+        }
         let create = unsafeBitCast(symbol, to: CreateImage.self)
         // optionIncludingWindow = 1 << 3, boundsIgnoreFraming = 1 << 0, bestResolution = 1 << 3
-        guard let image = create(.null, 1 << 3, UInt32(window.windowNumber), 1 << 0 | 1 << 3)?.takeRetainedValue() else {
+        guard let image = create(.null, 1 << 3, UInt32(window.windowNumber), 1 << 0 | 1 << 3)?.takeRetainedValue()
+        else {
             NSLog("GlintBar: snapshot failed")
             return
         }

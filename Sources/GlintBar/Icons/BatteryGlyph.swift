@@ -19,14 +19,17 @@ enum BatteryGlyph {
         NSColor.white.withAlphaComponent(0.45).setStroke()
         outline.stroke()
 
-        let nub = NSBezierPath(roundedRect: NSRect(x: 24.75, y: 4.25, width: 1.75, height: 4.5), xRadius: 0.9, yRadius: 0.9)
+        let nub = NSBezierPath(
+            roundedRect: NSRect(x: 24.75, y: 4.25, width: 1.75, height: 4.5), xRadius: 0.9, yRadius: 0.9)
         NSColor.white.withAlphaComponent(0.45).setFill()
         nub.fill()
 
         // At least a sliver, so an almost empty battery still shows its colour.
         let inner = body.insetBy(dx: 2, dy: 2)
         let fillWidth = max(inner.width * CGFloat(state.percent) / 100, 2)
-        let fill = NSBezierPath(roundedRect: NSRect(x: inner.minX, y: inner.minY, width: fillWidth, height: inner.height), xRadius: 1.75, yRadius: 1.75)
+        let fill = NSBezierPath(
+            roundedRect: NSRect(x: inner.minX, y: inner.minY, width: fillWidth, height: inner.height), xRadius: 1.75,
+            yRadius: 1.75)
         fillColor(for: state).setFill()
         fill.fill()
 

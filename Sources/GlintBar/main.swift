@@ -4,7 +4,8 @@ let app = NSApplication.shared
 
 // Only one GlintBar may own the Touch Bar.
 if let bundleID = Bundle.main.bundleIdentifier,
-   NSRunningApplication.runningApplications(withBundleIdentifier: bundleID).count > 1 {
+    NSRunningApplication.runningApplications(withBundleIdentifier: bundleID).count > 1
+{
     exit(0)
 }
 

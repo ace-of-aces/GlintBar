@@ -136,7 +136,9 @@ final class BarController: NSObject, NSTouchBarDelegate {
         if let button = itemViews[.appControls] as? GlassButton { showFrontmostApp(on: button) }
     }
 
-    func touchBar(_ touchBar: NSTouchBar, makeItemForIdentifier identifier: NSTouchBarItem.Identifier) -> NSTouchBarItem? {
+    func touchBar(_ touchBar: NSTouchBar, makeItemForIdentifier identifier: NSTouchBarItem.Identifier)
+        -> NSTouchBarItem?
+    {
         guard identifier == Self.barItemID else { return nil }
         let item = NSCustomTouchBarItem(identifier: identifier)
         item.view = barView
@@ -153,7 +155,8 @@ final class BarController: NSObject, NSTouchBarDelegate {
         SystemResources.shared.setNeeded(visible && layoutKinds.contains(.systemResources), by: "bar")
         setTimer(&pollTimer, running: visible && needsPolling, interval: 1.5) { $0.poll() }
         setClockRunning(visible && layoutKinds.contains(.clock))
-        NowPlayingMonitor.shared.isWatched = visible && (layoutKinds.contains(.nowPlaying) || layoutKinds.contains(.playPause))
+        NowPlayingMonitor.shared.isWatched =
+            visible && (layoutKinds.contains(.nowPlaying) || layoutKinds.contains(.playPause))
         // A paused track's position doesn't move.
         let isPlaying = NowPlayingMonitor.shared.isPlaying == true
         setTimer(&progressTimer, running: visible && isPlaying && layoutKinds.contains(.nowPlaying), interval: 0.5) {
@@ -210,7 +213,8 @@ final class BarController: NSObject, NSTouchBarDelegate {
         clockTimer?.invalidate()
         let minute = (Date().timeIntervalSinceReferenceDate / 60).rounded(.down) * 60
         // Just past the turn, so the new minute is what's read.
-        let timer = Timer(fire: Date(timeIntervalSinceReferenceDate: minute + 60.05), interval: 0, repeats: false) { [weak self] _ in
+        let timer = Timer(fire: Date(timeIntervalSinceReferenceDate: minute + 60.05), interval: 0, repeats: false) {
+            [weak self] _ in
             MainActor.assumeIsolated {
                 guard let self else { return }
                 (self.itemViews[.clock] as? ClockView)?.update()
@@ -437,11 +441,12 @@ final class BarController: NSObject, NSTouchBarDelegate {
     }
 
     private func updateNowPlaying() {
-        let playSymbol = switch NowPlayingMonitor.shared.isPlaying {
-        case true?: "pause.fill"
-        case false?: "play.fill"
-        case nil: "playpause.fill"
-        }
+        let playSymbol =
+            switch NowPlayingMonitor.shared.isPlaying {
+            case true?: "pause.fill"
+            case false?: "play.fill"
+            case nil: "playpause.fill"
+            }
         let playPause = itemViews[.playPause] as? GlassButton
         playPause?.setSymbol(playSymbol)
         playPause?.setAccessibilityValue(NowPlayingMonitor.shared.isPlaying.map { $0 ? "Playing" : "Paused" })
@@ -451,7 +456,8 @@ final class BarController: NSObject, NSTouchBarDelegate {
     /// The Now Playing widget's line, and the scrubber while it's open.
     private func updatePlaybackProgress() {
         let nowPlaying = NowPlayingMonitor.shared
-        (itemViews[.nowPlaying] as? NowPlayingView)?.update(title: nowPlaying.title, artist: nowPlaying.artist, progress: nowPlaying.progress)
+        (itemViews[.nowPlaying] as? NowPlayingView)?.update(
+            title: nowPlaying.title, artist: nowPlaying.artist, progress: nowPlaying.progress)
         panel.followPlayback()
     }
 
@@ -465,9 +471,9 @@ final class BarController: NSObject, NSTouchBarDelegate {
     }
 }
 
-private extension GlassButton {
+extension GlassButton {
     /// A level button's icon and spoken value at `value`.
-    func showLevel(_ level: Level, value: Float) {
+    fileprivate func showLevel(_ level: Level, value: Float) {
         setSymbol(level.symbol(for: value))
         setAccessibilityValue(GlassSlider.percentText(value))
     }

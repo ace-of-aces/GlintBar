@@ -206,7 +206,9 @@ final class SliderPanelController {
         }
     }
 
-    private func schedule(after delay: TimeInterval, _ action: @escaping @MainActor @Sendable (SliderPanelController) -> Void) {
+    private func schedule(
+        after delay: TimeInterval, _ action: @escaping @MainActor @Sendable (SliderPanelController) -> Void
+    ) {
         timer?.invalidate()
         timer = Timer.scheduledTimer(withTimeInterval: delay, repeats: false) { [weak self] _ in
             MainActor.assumeIsolated { if let self { action(self) } }
@@ -226,7 +228,10 @@ final class SliderPanelController {
     /// 3:07, or 1:02:33 past an hour.
     nonisolated static func timeText(_ seconds: Double) -> String {
         let total = max(Int(seconds.rounded(.down)), 0)
-        let hours = total / 3600, minutes = total % 3600 / 60, secs = total % 60
-        return hours > 0 ? String(format: "%d:%02d:%02d", hours, minutes, secs) : String(format: "%d:%02d", minutes, secs)
+        let hours = total / 3600
+        let minutes = total % 3600 / 60
+        let secs = total % 60
+        return hours > 0
+            ? String(format: "%d:%02d:%02d", hours, minutes, secs) : String(format: "%d:%02d", minutes, secs)
     }
 }

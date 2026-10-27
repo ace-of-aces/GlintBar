@@ -12,11 +12,14 @@ final class AudioController {
 
     private var device = AudioDeviceID(kAudioObjectUnknown)
     private var deviceListener: AudioObjectPropertyListenerBlock?
-    private static let watchedSelectors = [kAudioHardwareServiceDeviceProperty_VirtualMainVolume, kAudioDevicePropertyMute]
+    private static let watchedSelectors = [
+        kAudioHardwareServiceDeviceProperty_VirtualMainVolume, kAudioDevicePropertyMute,
+    ]
 
     private init() {
         var address = Self.address(kAudioHardwarePropertyDefaultOutputDevice, scope: kAudioObjectPropertyScopeGlobal)
-        AudioObjectAddPropertyListenerBlock(AudioObjectID(kAudioObjectSystemObject), &address, .main) { [weak self] _, _ in
+        AudioObjectAddPropertyListenerBlock(AudioObjectID(kAudioObjectSystemObject), &address, .main) {
+            [weak self] _, _ in
             MainActor.assumeIsolated { self?.bindDefaultDevice() }
         }
         bindDefaultDevice()
@@ -30,7 +33,8 @@ final class AudioController {
     func updateVolumeControl() {
         var address = Self.address(kAudioHardwareServiceDeviceProperty_VirtualMainVolume)
         var settable: DarwinBoolean = false
-        canChangeVolume = AudioObjectHasProperty(device, &address)
+        canChangeVolume =
+            AudioObjectHasProperty(device, &address)
             && AudioObjectIsPropertySettable(device, &address, &settable) == noErr
             && settable.boolValue
     }
@@ -74,7 +78,8 @@ final class AudioController {
         onChange?()
     }
 
-    private func read<T>(_ selector: AudioObjectPropertySelector, as _: T.Type) -> T? where T: Numeric & BitwiseCopyable {
+    private func read<T>(_ selector: AudioObjectPropertySelector, as _: T.Type) -> T?
+    where T: Numeric & BitwiseCopyable {
         var address = Self.address(selector)
         guard AudioObjectHasProperty(device, &address) else { return nil }
         var value = T.zero

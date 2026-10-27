@@ -243,18 +243,19 @@ enum NowPlayingReport: Equatable {
             return
         }
         let isPlaying = object["playing"] as? Bool
-        self = .state(State(
-            isPlaying: isPlaying,
-            title: object["title"] as? String,
-            artist: object["artist"] as? String,
-            duration: object["duration"] as? Double,
-            playhead: (object["elapsed"] as? Double).map { elapsed in
-                Playhead(
-                    elapsed: elapsed,
-                    at: (object["timestamp"] as? Double).map(Date.init(timeIntervalSince1970:)) ?? receivedAt,
-                    rate: object["rate"] as? Double ?? (isPlaying == true ? 1 : 0)
-                )
-            }
-        ))
+        self = .state(
+            State(
+                isPlaying: isPlaying,
+                title: object["title"] as? String,
+                artist: object["artist"] as? String,
+                duration: object["duration"] as? Double,
+                playhead: (object["elapsed"] as? Double).map { elapsed in
+                    Playhead(
+                        elapsed: elapsed,
+                        at: (object["timestamp"] as? Double).map(Date.init(timeIntervalSince1970:)) ?? receivedAt,
+                        rate: object["rate"] as? Double ?? (isPlaying == true ? 1 : 0)
+                    )
+                }
+            ))
     }
 }

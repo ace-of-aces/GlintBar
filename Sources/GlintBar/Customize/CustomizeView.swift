@@ -71,7 +71,8 @@ struct CustomizeView: View {
         .background(.black, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
         .overlay {
             RoundedRectangle(cornerRadius: 12, style: .continuous)
-                .strokeBorder(.white.opacity(dropIsBlocked ? 0 : (isAdding || isTargetedByFinder ? 0.35 : 0.08)), lineWidth: 1)
+                .strokeBorder(
+                    .white.opacity(dropIsBlocked ? 0 : (isAdding || isTargetedByFinder ? 0.35 : 0.08)), lineWidth: 1)
         }
         .overlay {
             RoundedRectangle(cornerRadius: 12, style: .continuous)
@@ -91,14 +92,20 @@ struct CustomizeView: View {
             }
         }
         .frame(width: barSize.width, height: barSize.height)
-        .onGeometryChange(for: CGRect.self) { $0.frame(in: .named(Self.space)) } action: { barFrame = $0 }
+        .onGeometryChange(for: CGRect.self) {
+            $0.frame(in: .named(Self.space))
+        } action: {
+            barFrame = $0
+        }
         .dropDestination(for: URL.self) { urls, location in
             let apps = urls.filter { UTType(filenameExtension: $0.pathExtension)?.conforms(to: .application) ?? false }
             guard !apps.isEmpty else { return false }
             let frames = BarLayout.frames(for: configuration.kinds, in: barSize)
             addApps(apps, at: frames.firstIndex { $0.midX > location.x })
             return true
-        } isTargeted: { isTargetedByFinder = $0 }
+        } isTargeted: {
+            isTargetedByFinder = $0
+        }
         .animation(.spring(duration: 0.32, bounce: 0.15), value: entries.map(\.layoutKey))
     }
 
@@ -135,9 +142,11 @@ struct CustomizeView: View {
                 Button("Remove \(item.kind.title)", systemImage: "minus.circle") { remove(item) }
             }
             .onTapGesture(count: 2) { changeApp(of: item) }
-            .gesture(dragGesture(item: item, source: .bar) {
-                CGPoint(x: barFrame.minX + entry.frame.midX, y: barFrame.midY)
-            })
+            .gesture(
+                dragGesture(item: item, source: .bar) {
+                    CGPoint(x: barFrame.minX + entry.frame.midX, y: barFrame.midY)
+                }
+            )
             .allowsHitTesting(!entry.isPlaceholder)
             .position(x: entry.frame.midX, y: entry.frame.midY)
     }
@@ -146,14 +155,19 @@ struct CustomizeView: View {
         Group {
             switch (drag, dropOutcome) {
             case (let drag?, .blocked?):
-                Label("There’s no room for \(drag.item.kind.title). Remove something first.", systemImage: "exclamationmark.circle")
-                    .foregroundStyle(.red)
+                Label(
+                    "There’s no room for \(drag.item.kind.title). Remove something first.",
+                    systemImage: "exclamationmark.circle"
+                )
+                .foregroundStyle(.red)
             case (let drag?, .remove?):
                 Label("Release to remove \(drag.item.kind.title).", systemImage: "minus.circle")
                     .foregroundStyle(.secondary)
             default:
-                Text("Drag items into the GlintBar, drag them along it to rearrange, and drag them out to remove them. Drop apps from Finder to add them.")
-                    .foregroundStyle(.secondary)
+                Text(
+                    "Drag items into the GlintBar, drag them along it to rearrange, and drag them out to remove them. Drop apps from Finder to add them."
+                )
+                .foregroundStyle(.secondary)
             }
         }
         .font(.callout)
@@ -193,7 +207,11 @@ struct CustomizeView: View {
         let boxWidth = previewWidth + 20
         return VStack(spacing: 7) {
             ItemPreview(kind: kind, width: previewWidth)
-                .onGeometryChange(for: CGRect.self) { $0.frame(in: .named(Self.space)) } action: { tileFrames[kind] = $0 }
+                .onGeometryChange(for: CGRect.self) {
+                    $0.frame(in: .named(Self.space))
+                } action: {
+                    tileFrames[kind] = $0
+                }
                 .padding(.horizontal, 10)
                 .padding(.vertical, 8)
                 .background(.black, in: RoundedRectangle(cornerRadius: 11, style: .continuous))
@@ -206,10 +224,15 @@ struct CustomizeView: View {
         .frame(minWidth: 86)
         .modifier(PaletteTileGuide(boxWidth: alignsTitle ? boxWidth : nil))
         .opacity(isUsed || isUnavailable ? 0.38 : 1)
-        .help(isUsed ? "Already in the GlintBar"
-            : isUnavailable ? "Not available on this Mac right now"
-            : kind == .app(nil) ? "Click to choose apps to add, or drag into the GlintBar and pick one. You can also drop apps from Finder onto the bar."
-            : "Drag into the GlintBar, or click to add it at the end")
+        .help(
+            isUsed
+                ? "Already in the GlintBar"
+                : isUnavailable
+                    ? "Not available on this Mac right now"
+                    : kind == .app(nil)
+                        ? "Click to choose apps to add, or drag into the GlintBar and pick one. You can also drop apps from Finder onto the bar."
+                        : "Drag into the GlintBar, or click to add it at the end"
+        )
         .contentShape(Rectangle())
         .onTapGesture {
             if kind == .app(nil) {
@@ -271,7 +294,8 @@ struct CustomizeView: View {
 
     // MARK: - Dragging
 
-    private func dragGesture(item: BarItem, source: DragSession.Source, center: @escaping () -> CGPoint) -> some Gesture {
+    private func dragGesture(item: BarItem, source: DragSession.Source, center: @escaping () -> CGPoint) -> some Gesture
+    {
         DragGesture(minimumDistance: 3, coordinateSpace: .named(Self.space))
             .onChanged { value in
                 if drag == nil {
@@ -281,7 +305,8 @@ struct CustomizeView: View {
                         item: item,
                         source: source,
                         location: value.location,
-                        grabOffset: CGSize(width: value.startLocation.x - origin.x, height: value.startLocation.y - origin.y)
+                        grabOffset: CGSize(
+                            width: value.startLocation.x - origin.x, height: value.startLocation.y - origin.y)
                     )
                 } else {
                     drag?.location = value.location
@@ -368,7 +393,8 @@ struct CustomizeView: View {
         for app in apps {
             let kind = BarItemKind.launching(app)
             guard !items.contains(where: { $0.kind == kind }),
-                  BarLayout.fits(items.map(\.kind) + [kind], in: barSize.width) else { continue }
+                BarLayout.fits(items.map(\.kind) + [kind], in: barSize.width)
+            else { continue }
             items.insert(BarItem(kind), at: position)
             position += 1
             added += 1

@@ -41,7 +41,9 @@ extension CustomizeView {
                 drag = DragSession(item: entries[index].item, source: .bar, location: center, grabOffset: .zero)
             case .pickUpPaletteItem(let kind):
                 let frame = tileFrames[kind] ?? .zero
-                drag = DragSession(item: BarItem(kind), source: .palette, location: CGPoint(x: frame.midX, y: frame.midY), grabOffset: .zero)
+                drag = DragSession(
+                    item: BarItem(kind), source: .palette, location: CGPoint(x: frame.midX, y: frame.midY),
+                    grabOffset: .zero)
             case .moveOverBar(let x):
                 drag?.location = CGPoint(x: barFrame.minX + x, y: barFrame.midY)
             case .moveOffBar:

@@ -72,7 +72,8 @@ struct ItemPreview: View {
                     .fill(.white.opacity(0.18))
                     .overlay(alignment: .leading) {
                         GeometryReader { proxy in
-                            Capsule().fill(Color(cgColor: GlassSlider.fillColor)).frame(width: proxy.size.width * progress)
+                            Capsule().fill(Color(cgColor: GlassSlider.fillColor)).frame(
+                                width: proxy.size.width * progress)
                         }
                     }
                     .frame(height: 2)

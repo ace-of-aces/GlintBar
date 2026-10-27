@@ -88,7 +88,9 @@ enum BarItemKind: Hashable, Sendable {
             self = .launching(URL(fileURLWithPath: String(path)))
             return
         }
-        guard let kind = PaletteSection.all.lazy.flatMap(\.kinds).first(where: { $0.rawValue == rawValue }) else { return nil }
+        guard let kind = PaletteSection.all.lazy.flatMap(\.kinds).first(where: { $0.rawValue == rawValue }) else {
+            return nil
+        }
         self = kind
     }
 
@@ -267,14 +269,18 @@ struct PaletteSection {
     static let all = [
         PaletteSection(title: "Media", kinds: [.previousTrack, .playPause, .nextTrack, .nowPlaying]),
         PaletteSection(title: "Sound", kinds: [.volume, .volumeDown, .volumeUp, .mute]),
-        PaletteSection(title: "Light", kinds: [
-            .displayBrightness, .displayBrightnessDown, .displayBrightnessUp,
-            .keyboardBrightness, .keyboardBrightnessDown, .keyboardBrightnessUp, .nightShift,
-        ]),
+        PaletteSection(
+            title: "Light",
+            kinds: [
+                .displayBrightness, .displayBrightnessDown, .displayBrightnessUp,
+                .keyboardBrightness, .keyboardBrightnessDown, .keyboardBrightnessUp, .nightShift,
+            ]),
         PaletteSection(title: "Spacing", kinds: [.space, .flexibleSpace]),
-        PaletteSection(title: "System", kinds: [
-            .appControls, .siri, .spotlight, .missionControl, .apps, .showDesktop, .inputSources, .quickActions,
-        ]),
+        PaletteSection(
+            title: "System",
+            kinds: [
+                .appControls, .siri, .spotlight, .missionControl, .apps, .showDesktop, .inputSources, .quickActions,
+            ]),
         PaletteSection(title: "Your Apps", kinds: [.app(nil)]),
         PaletteSection(title: "Status", kinds: [.clock, .battery, .systemResources]),
         PaletteSection(title: "Session", kinds: [.screenshot, .screenSaver, .lockScreen, .sleep]),

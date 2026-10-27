@@ -1,5 +1,6 @@
 import CoreGraphics
 import Testing
+
 @testable import GlintBar
 
 struct BarLayoutTests {
@@ -23,7 +24,8 @@ struct BarLayoutTests {
     }
 
     @Test func flexibleSpacesShareWhatIsLeft() {
-        let frames = BarLayout.frames(for: [.mute, .flexibleSpace, .siri, .flexibleSpace], in: CGSize(width: 288, height: 30))
+        let frames = BarLayout.frames(
+            for: [.mute, .flexibleSpace, .siri, .flexibleSpace], in: CGSize(width: 288, height: 30))
         // 288 - 88 fixed, split in two.
         #expect(frames[1].width == 100)
         #expect(frames[3].width == 100)

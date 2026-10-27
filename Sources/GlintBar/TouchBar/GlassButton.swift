@@ -78,7 +78,8 @@ final class GlassButton: NSView {
         guard name != symbol else { return }
         symbol = name
         let config = NSImage.SymbolConfiguration(pointSize: 15, weight: .semibold)
-        imageView.image = NSImage(systemSymbolName: name, accessibilityDescription: nil)?.withSymbolConfiguration(config)
+        imageView.image = NSImage(systemSymbolName: name, accessibilityDescription: nil)?.withSymbolConfiguration(
+            config)
     }
 
     func setImage(_ image: NSImage?) {

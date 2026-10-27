@@ -39,7 +39,9 @@ final class BarView: NSView {
         from anchor: NSView, placement: SliderPanelView.Placement,
         leading: PanelAccessory, trailing: PanelAccessory, value: Float
     ) {
-        panel.present(from: convert(anchor.bounds, from: anchor), placement: placement, leading: leading, trailing: trailing, value: value)
+        panel.present(
+            from: convert(anchor.bounds, from: anchor), placement: placement, leading: leading, trailing: trailing,
+            value: value)
         NSAnimationContext.runAnimationGroup { context in
             context.duration = SliderPanelView.popDuration
             main.animator().alphaValue = 0
@@ -166,7 +168,9 @@ final class SliderPanelView: NSView {
     @available(*, unavailable)
     required init?(coder: NSCoder) { fatalError() }
 
-    func present(from anchorFrame: NSRect, placement: Placement, leading: PanelAccessory, trailing: PanelAccessory, value: Float) {
+    func present(
+        from anchorFrame: NSRect, placement: Placement, leading: PanelAccessory, trailing: PanelAccessory, value: Float
+    ) {
         isHidden = false
         isPresented = true
         self.anchorFrame = anchorFrame
@@ -187,14 +191,15 @@ final class SliderPanelView: NSView {
         slider.setValue(value)
 
         let closeWidth = closeButton.intrinsicContentSize.width
-        let closeX: CGFloat = switch placement {
-        case .besideAnchor:
-            anchorFrame.midX - closeWidth / 2
-        case .overAnchor:
-            panelFrame.maxX + Self.gap + closeWidth <= bounds.width
-                ? panelFrame.maxX + Self.gap
-                : panelFrame.minX - Self.gap - closeWidth
-        }
+        let closeX: CGFloat =
+            switch placement {
+            case .besideAnchor:
+                anchorFrame.midX - closeWidth / 2
+            case .overAnchor:
+                panelFrame.maxX + Self.gap + closeWidth <= bounds.width
+                    ? panelFrame.maxX + Self.gap
+                    : panelFrame.minX - Self.gap - closeWidth
+            }
         closeButton.frame = NSRect(x: closeX, y: 0, width: closeWidth, height: BarMetrics.height)
         closeButton.alphaValue = 0
 
@@ -219,8 +224,10 @@ final class SliderPanelView: NSView {
                     context.duration = Self.popDuration
                     context.timingFunction = CAMediaTimingFunction(name: .easeOut)
                     self.background.animator().frame = self.panelFrame
-                    self.leading.animator().frame = self.accessoryFrame(centerX: self.panelFrame.minX + Self.accessoryInset)
-                    self.trailing.animator().frame = self.accessoryFrame(centerX: self.panelFrame.maxX - Self.accessoryInset)
+                    self.leading.animator().frame = self.accessoryFrame(
+                        centerX: self.panelFrame.minX + Self.accessoryInset)
+                    self.trailing.animator().frame = self.accessoryFrame(
+                        centerX: self.panelFrame.maxX - Self.accessoryInset)
                     self.leading.animator().alphaValue = 1
                     self.trailing.animator().alphaValue = 1
                 }

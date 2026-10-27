@@ -22,22 +22,22 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         bar.onStateChange = { [weak self] in self?.updateStatusIcon() }
         bar.start()
         #if DEBUG
-            listenForDebugCommands()
+        listenForDebugCommands()
         #endif
     }
 
     #if DEBUG
-        /// Lets the bar be driven without touching it, e.g.:
-        /// osascript -l JavaScript -e 'ObjC.import("Foundation"); $.NSDistributedNotificationCenter.defaultCenter
-        ///   .postNotificationNameObjectUserInfoDeliverImmediately("center.julian.GlintBar.debug", "down:volume", $(), true)'
-        private func listenForDebugCommands() {
-            DistributedNotificationCenter.default().addObserver(
-                forName: .init("center.julian.GlintBar.debug"), object: nil, queue: .main
-            ) { [weak self] note in
-                let command = note.object as? String ?? ""
-                MainActor.assumeIsolated { self?.bar.debug(command) }
-            }
+    /// Lets the bar be driven without touching it, e.g.:
+    /// osascript -l JavaScript -e 'ObjC.import("Foundation"); $.NSDistributedNotificationCenter.defaultCenter
+    ///   .postNotificationNameObjectUserInfoDeliverImmediately("center.julian.GlintBar.debug", "down:volume", $(), true)'
+    private func listenForDebugCommands() {
+        DistributedNotificationCenter.default().addObserver(
+            forName: .init("center.julian.GlintBar.debug"), object: nil, queue: .main
+        ) { [weak self] note in
+            let command = note.object as? String ?? ""
+            MainActor.assumeIsolated { self?.bar.debug(command) }
         }
+    }
     #endif
 
     /// Opening GlintBar.app again while it runs (Finder, Spotlight, `open`) shows the customizer.

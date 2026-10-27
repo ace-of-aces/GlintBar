@@ -41,9 +41,10 @@ final class Battery {
     func start() {
         guard source == nil else { return }
         // A C callback can't capture anything, hence going through the shared instance.
-        source = IOPSNotificationCreateRunLoopSource({ _ in
-            MainActor.assumeIsolated { Battery.shared.update() }
-        }, nil)?.takeRetainedValue()
+        source = IOPSNotificationCreateRunLoopSource(
+            { _ in
+                MainActor.assumeIsolated { Battery.shared.update() }
+            }, nil)?.takeRetainedValue()
         if let source { CFRunLoopAddSource(CFRunLoopGetMain(), source, .defaultMode) }
         update()
     }
@@ -72,13 +73,16 @@ final class Battery {
 
     private static func read() -> State? {
         guard let info = IOPSCopyPowerSourcesInfo()?.takeRetainedValue(),
-              let sources = IOPSCopyPowerSourcesList(info)?.takeRetainedValue() as? [CFTypeRef] else { return nil }
+            let sources = IOPSCopyPowerSourcesList(info)?.takeRetainedValue() as? [CFTypeRef]
+        else { return nil }
         for source in sources {
-            guard let description = IOPSGetPowerSourceDescription(info, source)?.takeUnretainedValue() as? [String: Any],
-                  description[kIOPSTypeKey] as? String == kIOPSInternalBatteryType,
-                  description[kIOPSIsPresentKey] as? Bool ?? true,
-                  let current = description[kIOPSCurrentCapacityKey] as? Int,
-                  let max = description[kIOPSMaxCapacityKey] as? Int, max > 0 else { continue }
+            guard
+                let description = IOPSGetPowerSourceDescription(info, source)?.takeUnretainedValue() as? [String: Any],
+                description[kIOPSTypeKey] as? String == kIOPSInternalBatteryType,
+                description[kIOPSIsPresentKey] as? Bool ?? true,
+                let current = description[kIOPSCurrentCapacityKey] as? Int,
+                let max = description[kIOPSMaxCapacityKey] as? Int, max > 0
+            else { continue }
             return State(
                 percent: min(Swift.max(current * 100 / max, 0), 100),
                 isCharging: description[kIOPSIsChargingKey] as? Bool ?? false,

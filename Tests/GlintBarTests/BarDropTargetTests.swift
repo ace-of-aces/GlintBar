@@ -1,5 +1,6 @@
 import CoreGraphics
 import Testing
+
 @testable import GlintBar
 
 @MainActor
@@ -7,10 +8,14 @@ struct BarDropTargetTests {
     /// A 300 × 30 bar at (100, 100) holding two 44 pt buttons: frames 0–44 and 52–96.
     private let items = [BarItem(.mute), BarItem(.siri)]
     private var target: BarDropTarget {
-        BarDropTarget(items: items, barFrame: CGRect(x: 100, y: 100, width: 300, height: 30), barSize: CGSize(width: 300, height: 30))
+        BarDropTarget(
+            items: items, barFrame: CGRect(x: 100, y: 100, width: 300, height: 30),
+            barSize: CGSize(width: 300, height: 30))
     }
 
-    private func drag(_ item: BarItem, from source: DragSession.Source, toBarX x: CGFloat, y: CGFloat = 115) -> DragSession {
+    private func drag(_ item: BarItem, from source: DragSession.Source, toBarX x: CGFloat, y: CGFloat = 115)
+        -> DragSession
+    {
         DragSession(item: item, source: source, location: CGPoint(x: 100 + x, y: y), grabOffset: .zero)
     }
 
@@ -37,7 +42,9 @@ struct BarDropTargetTests {
     }
 
     @Test func blockedWhenItDoesntFit() {
-        let full = BarDropTarget(items: items, barFrame: CGRect(x: 100, y: 100, width: 120, height: 30), barSize: CGSize(width: 120, height: 30))
+        let full = BarDropTarget(
+            items: items, barFrame: CGRect(x: 100, y: 100, width: 120, height: 30),
+            barSize: CGSize(width: 120, height: 30))
         #expect(full.outcome(of: drag(BarItem(.spotlight), from: .palette, toBarX: 20)) == .blocked)
     }
 

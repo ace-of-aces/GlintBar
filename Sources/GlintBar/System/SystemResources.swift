@@ -90,10 +90,13 @@ private final class Sampler: @unchecked Sendable {
     /// share since the previous reading; if that is older than `cpuBaselineMaxAge` (the
     /// first reading, or sampling was paused) it is measured over a short window instead,
     /// so the figure is current.
-    func read(cpuBaselineMaxAge: TimeInterval, then deliver: @escaping @MainActor @Sendable (SystemResources.Usage) -> Void) {
+    func read(
+        cpuBaselineMaxAge: TimeInterval, then deliver: @escaping @MainActor @Sendable (SystemResources.Usage) -> Void
+    ) {
         queue.async { [self] in
             let finish: @Sendable () -> Void = { [self] in
-                let usage = SystemResources.Usage(cpu: cpuUsage(), gpu: Self.gpuUsage(), memory: memoryUsage(), storage: Self.storageUsage())
+                let usage = SystemResources.Usage(
+                    cpu: cpuUsage(), gpu: Self.gpuUsage(), memory: memoryUsage(), storage: Self.storageUsage())
                 DispatchQueue.main.async { MainActor.assumeIsolated { deliver(usage) } }
             }
             let baselineAge = Double(DispatchTime.now().uptimeNanoseconds - lastCPUTicksTime.uptimeNanoseconds) / 1e9
@@ -111,7 +114,8 @@ private final class Sampler: @unchecked Sendable {
     /// Busy share of all CPU time since the previous call.
     private func cpuUsage() -> Double? {
         var info = host_cpu_load_info()
-        var count = mach_msg_type_number_t(MemoryLayout<host_cpu_load_info_data_t>.stride / MemoryLayout<integer_t>.stride)
+        var count = mach_msg_type_number_t(
+            MemoryLayout<host_cpu_load_info_data_t>.stride / MemoryLayout<integer_t>.stride)
         let result = withUnsafeMutablePointer(to: &info) {
             $0.withMemoryRebound(to: integer_t.self, capacity: Int(count)) {
                 host_statistics(host, HOST_CPU_LOAD_INFO, $0, &count)
@@ -141,7 +145,8 @@ private final class Sampler: @unchecked Sendable {
             }
         }
         guard result == KERN_SUCCESS else { return nil }
-        let appPages = UInt64(stats.internal_page_count) - min(UInt64(stats.purgeable_count), UInt64(stats.internal_page_count))
+        let appPages =
+            UInt64(stats.internal_page_count) - min(UInt64(stats.purgeable_count), UInt64(stats.internal_page_count))
         let usedPages = appPages + UInt64(stats.wire_count) + UInt64(stats.compressor_page_count)
         let total = Double(ProcessInfo.processInfo.physicalMemory)
         return total > 0 ? min(Double(usedPages) * Double(getpagesize()) / total, 1) : nil
@@ -150,12 +155,16 @@ private final class Sampler: @unchecked Sendable {
     /// The GPU's own utilisation figure, as shown in Activity Monitor's GPU History.
     private static func gpuUsage() -> Double? {
         var iterator = io_iterator_t()
-        guard IOServiceGetMatchingServices(kIOMainPortDefault, IOServiceMatching("IOAccelerator"), &iterator) == KERN_SUCCESS else { return nil }
+        guard
+            IOServiceGetMatchingServices(kIOMainPortDefault, IOServiceMatching("IOAccelerator"), &iterator)
+                == KERN_SUCCESS
+        else { return nil }
         defer { IOObjectRelease(iterator) }
         var busiest: Int?
         while case let service = IOIteratorNext(iterator), service != 0 {
             defer { IOObjectRelease(service) }
-            let statistics = IORegistryEntryCreateCFProperty(service, "PerformanceStatistics" as CFString, kCFAllocatorDefault, 0)?
+            let statistics =
+                IORegistryEntryCreateCFProperty(service, "PerformanceStatistics" as CFString, kCFAllocatorDefault, 0)?
                 .takeRetainedValue() as? [String: Any]
             if let percent = statistics?["Device Utilization %"] as? Int {
                 busiest = max(busiest ?? 0, percent)
@@ -168,8 +177,9 @@ private final class Sampler: @unchecked Sendable {
     private static func storageUsage() -> Double? {
         let keys: Set<URLResourceKey> = [.volumeTotalCapacityKey, .volumeAvailableCapacityForImportantUsageKey]
         guard let values = try? URL(fileURLWithPath: "/").resourceValues(forKeys: keys),
-              let total = values.volumeTotalCapacity, total > 0,
-              let available = values.volumeAvailableCapacityForImportantUsage else { return nil }
+            let total = values.volumeTotalCapacity, total > 0,
+            let available = values.volumeAvailableCapacityForImportantUsage
+        else { return nil }
         return min(max(1 - Double(available) / Double(total), 0), 1)
     }
 }

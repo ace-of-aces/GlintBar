@@ -139,7 +139,8 @@ private final class MeterView: NSView {
         super.layout()
         for field in [label, value] { field.sizeToFit() }
         label.setFrameOrigin(NSPoint(x: -2, y: Self.baseline - label.baselineOffsetFromBottom))
-        value.setFrameOrigin(NSPoint(x: bounds.width - value.frame.width + 2, y: Self.baseline - value.baselineOffsetFromBottom))
+        value.setFrameOrigin(
+            NSPoint(x: bounds.width - value.frame.width + 2, y: Self.baseline - value.baselineOffsetFromBottom))
         CATransaction.begin()
         CATransaction.setDisableActions(true)
         track.frame = NSRect(x: 0, y: Self.barY, width: bounds.width, height: Self.barHeight)

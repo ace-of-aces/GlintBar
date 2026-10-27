@@ -123,16 +123,17 @@ enum DisplayBrightness {
     }
 
     static func startObserving() {
-        CGDisplayRegisterReconfigurationCallback({ _, flags, _ in
-            // Each change is reported once as it begins and once per display after.
-            guard !flags.contains(.beginConfigurationFlag) else { return }
-            DispatchQueue.main.async {
-                MainActor.assumeIsolated {
-                    DisplayBrightness.updateBuiltInDisplay()
-                    DisplayBrightness.onDisplaysChange?()
+        CGDisplayRegisterReconfigurationCallback(
+            { _, flags, _ in
+                // Each change is reported once as it begins and once per display after.
+                guard !flags.contains(.beginConfigurationFlag) else { return }
+                DispatchQueue.main.async {
+                    MainActor.assumeIsolated {
+                        DisplayBrightness.updateBuiltInDisplay()
+                        DisplayBrightness.onDisplaysChange?()
+                    }
                 }
-            }
-        }, nil)
+            }, nil)
         updateBuiltInDisplay()
     }
 
@@ -231,19 +232,21 @@ enum SystemActions {
 
     /// Switches to the next keyboard input source, wrapping around.
     static func nextInputSource() {
-        let filter = [
-            kTISPropertyInputSourceCategory as String: kTISCategoryKeyboardInputSource as String,
-            kTISPropertyInputSourceIsSelectCapable as String: true,
-        ] as CFDictionary
+        let filter =
+            [
+                kTISPropertyInputSourceCategory as String: kTISCategoryKeyboardInputSource as String,
+                kTISPropertyInputSourceIsSelectCapable as String: true,
+            ] as CFDictionary
         let list = TISCreateInputSourceList(filter, false)?.takeRetainedValue() as? [TISInputSource] ?? []
         let sources = list.filter { source in
             let type = property(kTISPropertyInputSourceType, of: source) as? String
             return type == kTISTypeKeyboardLayout as String || type == kTISTypeKeyboardInputMode as String
         }
         guard !sources.isEmpty else { return }
-        let currentID = TISCopyCurrentKeyboardInputSource().map {
-            property(kTISPropertyInputSourceID, of: $0.takeRetainedValue()) as? String
-        } ?? nil
+        let currentID =
+            TISCopyCurrentKeyboardInputSource().map {
+                property(kTISPropertyInputSourceID, of: $0.takeRetainedValue()) as? String
+            } ?? nil
         let index = sources.firstIndex { property(kTISPropertyInputSourceID, of: $0) as? String == currentID }
         let next = sources[((index ?? -1) + 1) % sources.count]
         TISSelectInputSource(next)
@@ -255,7 +258,8 @@ enum SystemActions {
     }
 
     private static func postDistributed(_ name: String) {
-        DistributedNotificationCenter.default().postNotificationName(.init(name), object: nil, userInfo: nil, deliverImmediately: true)
+        DistributedNotificationCenter.default().postNotificationName(
+            .init(name), object: nil, userInfo: nil, deliverImmediately: true)
     }
 
     /// Opens `app`, or brings it to the front if it's already running.
