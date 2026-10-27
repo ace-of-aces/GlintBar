@@ -531,7 +531,7 @@ final class BarController: NSObject, NSTouchBarDelegate {
     }
 
     /// 3:07, or 1:02:33 past an hour.
-    private static func timeText(_ seconds: Double) -> String {
+    nonisolated static func timeText(_ seconds: Double) -> String {
         let total = max(Int(seconds.rounded(.down)), 0)
         let hours = total / 3600, minutes = total % 3600 / 60, secs = total % 60
         return hours > 0 ? String(format: "%d:%02d:%02d", hours, minutes, secs) : String(format: "%d:%02d", minutes, secs)

@@ -14,14 +14,12 @@ final class NowPlayingMonitor {
     private(set) var duration: Double?
     var onChange: (() -> Void)?
 
-    /// The position the player last reported, when it was true, and how fast it moves.
-    private var reportedElapsed: Double?
-    private var reportedAt = Date()
-    private var reportedRate: Double = 0
+    /// Where the player last said it was.
+    private var playhead: Playhead?
 
     private var process: Process?
     private var input: Pipe?
-    private var pending = Data()
+    private var pending = LineBuffer()
     private var failures = 0
     private var isStopping = false
 
@@ -50,19 +48,14 @@ final class NowPlayingMonitor {
     func assumeToggled() {
         guard let isPlaying else { return }
         // Freeze or resume the position along with it.
-        reportedElapsed = position()
-        reportedAt = Date()
-        reportedRate = isPlaying ? 0 : 1
+        if let position = position() { playhead = Playhead(elapsed: position, at: Date(), rate: isPlaying ? 0 : 1) }
         self.isPlaying = !isPlaying
         onChange?()
     }
 
     /// The playback position in seconds, extrapolated from the last report.
     func position(at date: Date = Date()) -> Double? {
-        guard let reportedElapsed else { return nil }
-        let rate = isPlaying == true ? reportedRate : 0
-        let position = reportedElapsed + rate * date.timeIntervalSince(reportedAt)
-        return min(max(position, 0), duration ?? .infinity)
+        playhead?.position(at: date, isPlaying: isPlaying == true, duration: duration)
     }
 
     /// Position as a fraction of the track, if both are known.
@@ -80,8 +73,7 @@ final class NowPlayingMonitor {
         let target = min(max(seconds, 0), duration ?? seconds)
         // Throwing API: a helper that just died must not take GlintBar down with it.
         try? input.fileHandleForWriting.write(contentsOf: Data("seek \(target)\n".utf8))
-        reportedElapsed = target
-        reportedAt = Date()
+        playhead = Playhead(elapsed: target, at: Date(), rate: playhead?.rate ?? (isPlaying == true ? 1 : 0))
         onChange?()
     }
 
@@ -141,14 +133,14 @@ final class NowPlayingMonitor {
     private func helperExited() {
         process = nil
         input = nil
-        pending.removeAll()
+        pending = LineBuffer()
         // Without the helper nothing it reported can be trusted, the track included:
         // left alone, a helper that gave up would leave the last song on the bar for good.
         isPlaying = nil
         title = nil
         artist = nil
         duration = nil
-        reportedElapsed = nil
+        playhead = nil
         onChange?()
         guard !isStopping else { return }
 
@@ -165,24 +157,87 @@ final class NowPlayingMonitor {
     }
 
     private func consume(_ data: Data) {
-        pending.append(data)
-        while let newline = pending.firstIndex(of: UInt8(ascii: "\n")) {
-            let line = pending[pending.startIndex..<newline]
-            pending.removeSubrange(pending.startIndex...newline)
-            guard let object = try? JSONSerialization.jsonObject(with: line) as? [String: Any] else { continue }
-            if let error = object["error"] as? String {
+        for line in pending.append(data) {
+            switch NowPlayingReport(line: line) {
+            case .state(let report)?:
+                failures = 0
+                isPlaying = report.isPlaying
+                title = report.title
+                artist = report.artist
+                duration = report.duration
+                playhead = report.playhead
+                onChange?()
+            case .error(let error)?:
                 NSLog("GlintBar: now-playing helper: \(error)")
+            case nil:
                 continue
             }
-            failures = 0
-            isPlaying = object["playing"] as? Bool
-            title = object["title"] as? String
-            artist = object["artist"] as? String
-            duration = object["duration"] as? Double
-            reportedElapsed = object["elapsed"] as? Double
-            reportedRate = object["rate"] as? Double ?? (isPlaying == true ? 1 : 0)
-            reportedAt = (object["timestamp"] as? Double).map(Date.init(timeIntervalSince1970:)) ?? Date()
-            onChange?()
         }
+    }
+}
+
+/// A playback position the player reported: `elapsed` seconds in at `at`, moving at `rate`.
+struct Playhead: Equatable {
+    var elapsed: Double
+    var at: Date
+    var rate: Double
+
+    /// The position at `date`, extrapolated while playing and kept within the track.
+    func position(at date: Date, isPlaying: Bool, duration: Double?) -> Double {
+        let position = elapsed + (isPlaying ? rate : 0) * date.timeIntervalSince(at)
+        return min(max(position, 0), duration ?? .infinity)
+    }
+}
+
+/// Collects the helper's output and hands it out a whole line at a time.
+struct LineBuffer {
+    private var pending = Data()
+
+    /// The lines `data` completes, without their newlines.
+    mutating func append(_ data: Data) -> [Data] {
+        pending.append(data)
+        var lines: [Data] = []
+        while let newline = pending.firstIndex(of: UInt8(ascii: "\n")) {
+            lines.append(Data(pending[pending.startIndex..<newline]))
+            pending.removeSubrange(pending.startIndex...newline)
+        }
+        return lines
+    }
+}
+
+/// What one line from the helper says.
+enum NowPlayingReport: Equatable {
+    struct State: Equatable {
+        var isPlaying: Bool?
+        var title: String?
+        var artist: String?
+        var duration: Double?
+        var playhead: Playhead?
+    }
+
+    case state(State)
+    case error(String)
+
+    /// nil for a line that isn't a JSON object.
+    init?(line: Data, receivedAt: Date = Date()) {
+        guard let object = try? JSONSerialization.jsonObject(with: line) as? [String: Any] else { return nil }
+        if let error = object["error"] as? String {
+            self = .error(error)
+            return
+        }
+        let isPlaying = object["playing"] as? Bool
+        self = .state(State(
+            isPlaying: isPlaying,
+            title: object["title"] as? String,
+            artist: object["artist"] as? String,
+            duration: object["duration"] as? Double,
+            playhead: (object["elapsed"] as? Double).map { elapsed in
+                Playhead(
+                    elapsed: elapsed,
+                    at: (object["timestamp"] as? Double).map(Date.init(timeIntervalSince1970:)) ?? receivedAt,
+                    rate: object["rate"] as? Double ?? (isPlaying == true ? 1 : 0)
+                )
+            }
+        ))
     }
 }

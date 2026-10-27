@@ -28,5 +28,10 @@ let package = Package(
             dependencies: ["GlintBarPrivate"],
             path: "Sources/GlintBar"
         ),
+        .testTarget(
+            name: "GlintBarTests",
+            dependencies: ["GlintBar"],
+            path: "Tests/GlintBarTests"
+        ),
     ]
 )

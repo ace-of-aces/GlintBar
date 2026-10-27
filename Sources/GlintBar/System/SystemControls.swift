@@ -65,10 +65,15 @@ enum Level: CaseIterable {
     /// Volume steps from the level it had before muting, so turning it up unmutes.
     func step(_ direction: Float) {
         let current = self == .volume ? AudioController.shared.volume : value
-        set(((current * Self.steps).rounded() + direction) / Self.steps)
+        set(Self.stepped(current, by: direction))
     }
 
-    private static let steps: Float = 16
+    /// `value` snapped to the nearest notch, then moved `direction` notches.
+    nonisolated static func stepped(_ value: Float, by direction: Float) -> Float {
+        ((value * steps).rounded() + direction) / steps
+    }
+
+    private nonisolated static let steps: Float = 16
 
     /// Icons at the low and high ends of the slider.
     var lowSymbol: String {

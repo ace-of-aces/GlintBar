@@ -1,0 +1,18 @@
+# Builds GlintBar and runs its tests. macOS runners bill at 10× the Linux rate on
+# private repositories, so this only runs for pushes to main and pull requests.
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  test:
+    runs-on: macos-26
+    steps:
+      - uses: actions/checkout@v5
+      - name: Build
+        run: swift build -c release
+      - name: Test
+        run: swift test

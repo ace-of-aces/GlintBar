@@ -88,7 +88,7 @@ enum BarItemKind: Hashable, Sendable {
             self = .launching(URL(fileURLWithPath: String(path)))
             return
         }
-        guard let kind = PaletteSection.all.lazy.flatMap(\.kinds).first(where: { $0.appURL == nil && $0.rawValue == rawValue }) else { return nil }
+        guard let kind = PaletteSection.all.lazy.flatMap(\.kinds).first(where: { $0.rawValue == rawValue }) else { return nil }
         self = kind
     }
 

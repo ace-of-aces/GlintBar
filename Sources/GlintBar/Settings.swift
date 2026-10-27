@@ -11,11 +11,14 @@ enum Settings {
     }
 
     /// Carries settings over from before the app was renamed from Glint, once.
-    static func migrateFromGlint() {
-        let defaults = UserDefaults.standard
-        guard let bundleID = Bundle.main.bundleIdentifier,
+    static func migrateFromGlint(
+        defaults: UserDefaults = .standard,
+        bundleID: String? = Bundle.main.bundleIdentifier,
+        oldBundleID: String = "center.julian.Glint"
+    ) {
+        guard let bundleID,
               defaults.persistentDomain(forName: bundleID)?.isEmpty ?? true,
-              let old = defaults.persistentDomain(forName: "center.julian.Glint"), !old.isEmpty
+              let old = defaults.persistentDomain(forName: oldBundleID), !old.isEmpty
         else { return }
         defaults.setPersistentDomain(old, forName: bundleID)
     }

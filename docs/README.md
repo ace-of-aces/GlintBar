@@ -5,7 +5,7 @@ and how to install it, see the [main README](../README.md).
 
 ## Project layout
 
-GlintBar is a Swift package (`Package.swift`) with three targets:
+GlintBar is a Swift package (`Package.swift`) with three targets, plus tests:
 
 | Target | What it is |
 | --- | --- |
@@ -43,6 +43,17 @@ swift build && .build/debug/GlintBar
 ```
 
 Launch at login is only available when running from the `.app`.
+
+### Tests
+
+```bash
+swift test
+```
+
+The tests in [`Tests/GlintBarTests`](../Tests/GlintBarTests) cover what runs without the
+Touch Bar: item layout, saving and loading layouts, reading the now-playing helper's output,
+and the settings migration. CI ([`.github/workflows/ci.yml`](../.github/workflows/ci.yml))
+builds and tests every push to `main` and every pull request.
 
 ### Icons
 
