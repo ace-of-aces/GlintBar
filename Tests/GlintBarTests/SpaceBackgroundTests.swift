@@ -151,6 +151,15 @@ private struct Pixels {
 
     /// `count` columns from `first`, row by row.
     func columns(_ first: Int, count: Int) -> [UInt8] {
-        (0..<height).flatMap { row in bytes[((row * width + first) * 4)..<((row * width + first + count) * 4)] }
+        // Spelled out step by step: as one expression it takes some compilers too long to
+        // type-check.
+        var result: [UInt8] = []
+        result.reserveCapacity(height * count * 4)
+        for row in 0..<height {
+            let start: Int = (row * width + first) * 4
+            let end: Int = start + count * 4
+            result.append(contentsOf: bytes[start..<end])
+        }
+        return result
     }
 }
