@@ -182,7 +182,7 @@ struct CustomizeView: View {
                     .foregroundStyle(.secondary)
             case (nil, _) where isHoveringFlexibleSpace:
                 Label(
-                    "Click the flexible space to choose its background: Midnight Sky, Black Hole or Prism.",
+                    "Click the flexible space to choose its background.",
                     systemImage: "sparkles"
                 )
                 .foregroundStyle(.secondary)
