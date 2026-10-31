@@ -94,7 +94,7 @@ final class CustomizeWindowController: NSWindowController, NSWindowDelegate {
     #endif
 
     func windowWillClose(_ notification: Notification) {
-        BarConfiguration.shared.previewKinds = nil
+        BarConfiguration.shared.previewItems = nil
         SystemResources.shared.setNeeded(false, by: Self.resourcesClient)
         // A closed window's SwiftUI views keep updating with what they observe (the meters
         // every two seconds), so they go once it has closed (the close may come from a

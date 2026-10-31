@@ -43,26 +43,68 @@ struct SpaceBackgroundTests {
     /// The Touch Bar row gives every flexible space with a background a view of its own,
     /// keeps it while other items come and go, and hides it while the space is too narrow.
     @Test func barRowKeepsABackgroundViewPerSpace() {
-        let row = MainRowView(frame: NSRect(x: 0, y: 0, width: BarMetrics.width, height: BarMetrics.height))
-        func backgroundViews() -> [SpaceBackgroundView] { row.subviews.compactMap { $0 as? SpaceBackgroundView } }
-
-        row.setLayout([.flexibleSpace(.blackHole), .mute, .flexibleSpace(.blackHole), .flexibleSpace(nil)], views: [:])
+        let row = Self.row()
+        let left = BarItem(.flexibleSpace(.blackHole))
+        let right = BarItem(.flexibleSpace(.blackHole))
+        row.setLayout([left, BarItem(.mute), right, BarItem(.flexibleSpace(nil))], views: [:])
         row.layoutSubtreeIfNeeded()
-        let before = backgroundViews()
+        let before = Self.backgroundViews(in: row)
         #expect(before.count == 2)
 
-        row.setLayout([.siri, .flexibleSpace(.blackHole), .mute, .flexibleSpace(.blackHole)], views: [:])
+        row.setLayout([BarItem(.siri), left, BarItem(.mute), right], views: [:])
         row.layoutSubtreeIfNeeded()
-        #expect(Set(backgroundViews().map(ObjectIdentifier.init)) == Set(before.map(ObjectIdentifier.init)))
+        #expect(Set(Self.backgroundViews(in: row).map(ObjectIdentifier.init)) == Set(before.map(ObjectIdentifier.init)))
 
-        row.setLayout([.flexibleSpace(.prism)], views: [:])
+        row.setLayout([BarItem(.flexibleSpace(.prism))], views: [:])
         row.layoutSubtreeIfNeeded()
-        #expect(backgroundViews().map(\.background) == [.prism])
-        #expect(backgroundViews().first?.alphaValue == 1)
+        #expect(Self.backgroundViews(in: row).map(\.background) == [.prism])
+        #expect(Self.backgroundViews(in: row).first?.alphaValue == 1)
 
         row.setFrameSize(NSSize(width: 80, height: BarMetrics.height))
         row.layoutSubtreeIfNeeded()
-        #expect(backgroundViews().first?.alphaValue == 0)
+        #expect(Self.backgroundViews(in: row).first?.alphaValue == 0)
+    }
+
+    /// Giving one space the picture another one already shows leaves that other picture
+    /// where it is, instead of handing it over (and sliding it across the bar).
+    @Test func changingOneSpaceLeavesTheOthersInPlace() {
+        let row = Self.row()
+        let left = BarItem(.flexibleSpace(.blackHole))
+        let right = BarItem(.flexibleSpace(.prism))
+        row.setLayout([left, BarItem(.mute), right], views: [:])
+        row.layoutSubtreeIfNeeded()
+        let prism = Self.backgroundViews(in: row).first { $0.background == .prism }
+        let prismFrame = prism?.frame
+
+        row.setLayout([BarItem(.flexibleSpace(.prism), id: left.id), BarItem(.mute), right], views: [:])
+        row.layoutSubtreeIfNeeded()
+        let views = Self.backgroundViews(in: row)
+        #expect(views.count == 2 && views.allSatisfy { $0.background == .prism })
+        #expect(views.contains { $0 === prism })
+        #expect(prism?.frame == prismFrame)
+    }
+
+    /// Removing the first of two spaces with the same picture leaves the second's alone.
+    @Test func removingASpaceLeavesTheOthersInPlace() {
+        let row = Self.row()
+        let first = BarItem(.flexibleSpace(.blackHole))
+        let second = BarItem(.flexibleSpace(.blackHole))
+        let mute = BarItem(.mute)
+        row.setLayout([first, mute, second], views: [:])
+        row.layoutSubtreeIfNeeded()
+        let secondView = Self.backgroundViews(in: row).max { $0.frame.minX < $1.frame.minX }
+
+        row.setLayout([mute, second], views: [:])
+        row.layoutSubtreeIfNeeded()
+        #expect(Self.backgroundViews(in: row).map(ObjectIdentifier.init) == secondView.map { [ObjectIdentifier($0)] })
+    }
+
+    private static func row() -> MainRowView {
+        MainRowView(frame: NSRect(x: 0, y: 0, width: BarMetrics.width, height: BarMetrics.height))
+    }
+
+    private static func backgroundViews(in row: MainRowView) -> [SpaceBackgroundView] {
+        row.subviews.compactMap { $0 as? SpaceBackgroundView }
     }
 }
 

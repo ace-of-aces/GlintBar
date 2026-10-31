@@ -17,9 +17,10 @@ final class BarConfiguration {
     private(set) var items: [BarItem]
 
     /// A transient arrangement shown on the Touch Bar while an item is being dragged
-    /// in the customization window. Never saved.
-    var previewKinds: [BarItemKind]? {
-        didSet { if previewKinds != oldValue { onChange?() } }
+    /// in the customization window. Never saved. The items keep their ids, so the bar
+    /// can tell which flexible space is which.
+    var previewItems: [BarItem]? {
+        didSet { if previewItems != oldValue { onChange?() } }
     }
 
     /// Called after every change, for observers outside SwiftUI (the Touch Bar itself).

@@ -37,7 +37,7 @@ struct CustomizeView: View {
         .padding(.bottom, 24)
         .coordinateSpace(.named(Self.space))
         .overlay(alignment: .topLeading) { ghost }
-        .onChange(of: hardwarePreview) { _, kinds in configuration.previewKinds = kinds }
+        .onChange(of: hardwarePreview) { _, items in configuration.previewItems = items }
         #if DEBUG
         .onChange(of: CustomizeDebugDriver.shared.generation) { runDebugSteps() }
         #endif
@@ -354,7 +354,7 @@ struct CustomizeView: View {
             // The palette's App tile: leave its slot open while the user picks the app.
             if case .insert(let index) = outcome { AppPicker.chooseApps { addApps($0, at: index) } }
             withAnimation(.spring(duration: 0.32, bounce: 0.15)) { self.drag = nil }
-            configuration.previewKinds = nil
+            configuration.previewItems = nil
             return
         }
         withAnimation(.spring(duration: 0.32, bounce: 0.15)) {
@@ -370,7 +370,7 @@ struct CustomizeView: View {
             }
             self.drag = nil
         }
-        configuration.previewKinds = nil
+        configuration.previewItems = nil
     }
 
     private var dropTarget: BarDropTarget {
@@ -402,9 +402,9 @@ struct CustomizeView: View {
     var displayedEntries: [BarEntry] { dropTarget.entries(during: drag) }
 
     /// What the real Touch Bar shows during a drag: the would-be result.
-    private var hardwarePreview: [BarItemKind]? {
+    private var hardwarePreview: [BarItem]? {
         guard drag != nil else { return nil }
-        return displayedEntries.filter { !$0.isHidden }.map(\.item.kind)
+        return displayedEntries.filter { !$0.isHidden }.map(\.item)
     }
 
     // MARK: - Editing

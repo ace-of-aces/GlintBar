@@ -63,27 +63,25 @@ final class BarView: NSView {
 /// are its own.
 @MainActor
 final class MainRowView: NSView {
+    private var items: [BarItem] = []
     private var kinds: [BarItemKind] = []
     private var views: [BarItemKind: NSView] = [:]
     /// Views added by the last `setLayout`, which fade in instead of sliding.
     private var addedKinds: Set<BarItemKind> = []
-    private var backgrounds: [BackgroundSlot: SpaceBackgroundView] = [:]
-    private var addedBackgrounds: Set<BackgroundSlot> = []
+    /// Each flexible space's background, by the space's id: a picture stays with its space
+    /// and never moves over to another one.
+    private var backgrounds: [BarItem.ID: SpaceBackgroundView] = [:]
+    /// Backgrounds added since the last layout, which fade in where they are.
+    private var addedBackgrounds: Set<BarItem.ID> = []
     private var animateNextLayout = false
 
-    /// A flexible space's background, known by its picture and which of the spaces showing
-    /// that picture it is, so it keeps its view while the layout changes around it.
-    private struct BackgroundSlot: Hashable {
-        var background: SpaceBackground
-        /// 0 for the first space showing `background`, 1 for the second, …
-        var occurrence: Int
-    }
-
-    func setLayout(_ kinds: [BarItemKind], views: [BarItemKind: NSView]) {
+    func setLayout(_ items: [BarItem], views: [BarItemKind: NSView]) {
+        let kinds = items.map(\.kind)
         for (kind, view) in self.views where views[kind] !== view || !kinds.contains(kind) {
             view.removeFromSuperview()
         }
         animateNextLayout = !self.kinds.isEmpty && window != nil
+        self.items = items
         self.kinds = kinds
         self.views = views.filter { kinds.contains($0.key) }
         addedKinds = []
@@ -98,9 +96,13 @@ final class MainRowView: NSView {
     /// Makes a background view for every flexible space that shows one, and lets those of
     /// spaces that went (or changed their picture) fade away where they were.
     private func updateBackgrounds() {
-        let slots = Set(Self.backgroundSlots(in: kinds).map(\.slot))
-        for (slot, view) in backgrounds where !slots.contains(slot) {
-            backgrounds[slot] = nil
+        var wanted: [BarItem.ID: SpaceBackground] = [:]
+        for item in items {
+            if let background = item.kind.background { wanted[item.id] = background }
+        }
+        for (id, view) in backgrounds where wanted[id] != view.background {
+            backgrounds[id] = nil
+            addedBackgrounds.remove(id)
             guard animateNextLayout else {
                 view.removeFromSuperview()
                 continue
@@ -112,24 +114,12 @@ final class MainRowView: NSView {
                 MainActor.assumeIsolated { view.removeFromSuperview() }
             }
         }
-        addedBackgrounds = []
-        for slot in slots where backgrounds[slot] == nil {
-            let view = SpaceBackgroundView(slot.background)
+        for (id, background) in wanted where backgrounds[id] == nil {
+            let view = SpaceBackgroundView(background)
             // Behind the items, which it only ever meets mid-animation.
             addSubview(view, positioned: .below, relativeTo: nil)
-            backgrounds[slot] = view
-            addedBackgrounds.insert(slot)
-        }
-    }
-
-    /// The flexible spaces with a background, by their index in `kinds`.
-    private static func backgroundSlots(in kinds: [BarItemKind]) -> [(index: Int, slot: BackgroundSlot)] {
-        var counts: [SpaceBackground: Int] = [:]
-        return kinds.enumerated().compactMap { index, kind in
-            guard let background = kind.background else { return nil }
-            let occurrence = counts[background, default: 0]
-            counts[background] = occurrence + 1
-            return (index, BackgroundSlot(background: background, occurrence: occurrence))
+            backgrounds[id] = view
+            addedBackgrounds.insert(id)
         }
     }
 
@@ -151,13 +141,12 @@ final class MainRowView: NSView {
                     (animate ? view.animator() : view).frame = frame
                 }
             }
-            for (index, slot) in Self.backgroundSlots(in: kinds) {
-                guard let view = backgrounds[slot] else { continue }
-                let frame = frames[index]
+            for (item, frame) in zip(items, frames) {
+                guard let view = backgrounds[item.id] else { continue }
                 view.prepare(for: frame.size)
                 // Too narrow for its picture, a space fades to empty (and back once it widens).
-                let alpha: CGFloat = slot.background.isShown(inWidth: frame.width) ? 1 : 0
-                if animate, addedBackgrounds.contains(slot) {
+                let alpha: CGFloat = view.background.isShown(inWidth: frame.width) ? 1 : 0
+                if animate, addedBackgrounds.contains(item.id) {
                     view.frame = frame
                     view.alphaValue = 0
                     view.animator().alphaValue = alpha
