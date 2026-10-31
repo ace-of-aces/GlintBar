@@ -59,20 +59,29 @@ final class BarView: NSView {
 }
 
 /// The configurable row of items. Views are owned by `BarController`; this view only
-/// shows and positions them according to `BarLayout`.
+/// shows and positions them according to `BarLayout`. The backgrounds of flexible spaces
+/// are its own.
 @MainActor
 final class MainRowView: NSView {
+    private var items: [BarItem] = []
     private var kinds: [BarItemKind] = []
     private var views: [BarItemKind: NSView] = [:]
     /// Views added by the last `setLayout`, which fade in instead of sliding.
     private var addedKinds: Set<BarItemKind> = []
+    /// Each flexible space's background, by the space's id: a picture stays with its space
+    /// and never moves over to another one.
+    private var backgrounds: [BarItem.ID: SpaceBackgroundView] = [:]
+    /// Backgrounds added since the last layout, which fade in where they are.
+    private var addedBackgrounds: Set<BarItem.ID> = []
     private var animateNextLayout = false
 
-    func setLayout(_ kinds: [BarItemKind], views: [BarItemKind: NSView]) {
+    func setLayout(_ items: [BarItem], views: [BarItemKind: NSView]) {
+        let kinds = items.map(\.kind)
         for (kind, view) in self.views where views[kind] !== view || !kinds.contains(kind) {
             view.removeFromSuperview()
         }
         animateNextLayout = !self.kinds.isEmpty && window != nil
+        self.items = items
         self.kinds = kinds
         self.views = views.filter { kinds.contains($0.key) }
         addedKinds = []
@@ -80,7 +89,38 @@ final class MainRowView: NSView {
             addSubview(view)
             addedKinds.insert(kind)
         }
+        updateBackgrounds()
         needsLayout = true
+    }
+
+    /// Makes a background view for every flexible space that shows one, and lets those of
+    /// spaces that went (or changed their picture) fade away where they were.
+    private func updateBackgrounds() {
+        var wanted: [BarItem.ID: SpaceBackground] = [:]
+        for item in items {
+            if let background = item.kind.background { wanted[item.id] = background }
+        }
+        for (id, view) in backgrounds where wanted[id] != view.background {
+            backgrounds[id] = nil
+            addedBackgrounds.remove(id)
+            guard animateNextLayout else {
+                view.removeFromSuperview()
+                continue
+            }
+            NSAnimationContext.runAnimationGroup { context in
+                context.duration = 0.25
+                view.animator().alphaValue = 0
+            } completionHandler: {
+                MainActor.assumeIsolated { view.removeFromSuperview() }
+            }
+        }
+        for (id, background) in wanted where backgrounds[id] == nil {
+            let view = SpaceBackgroundView(background)
+            // Behind the items, which it only ever meets mid-animation.
+            addSubview(view, positioned: .below, relativeTo: nil)
+            backgrounds[id] = view
+            addedBackgrounds.insert(id)
+        }
     }
 
     override func layout() {
@@ -90,7 +130,8 @@ final class MainRowView: NSView {
         NSAnimationContext.runAnimationGroup { context in
             context.duration = animate ? 0.25 : 0
             context.timingFunction = CAMediaTimingFunction(name: .easeOut)
-            for (kind, frame) in zip(kinds, BarLayout.frames(for: kinds, in: bounds.size)) {
+            let frames = BarLayout.frames(for: kinds, in: bounds.size)
+            for (kind, frame) in zip(kinds, frames) {
                 guard let view = views[kind] else { continue }
                 if animate, addedKinds.contains(kind) {
                     view.frame = frame
@@ -100,8 +141,23 @@ final class MainRowView: NSView {
                     (animate ? view.animator() : view).frame = frame
                 }
             }
+            for (item, frame) in zip(items, frames) {
+                guard let view = backgrounds[item.id] else { continue }
+                view.prepare(for: frame.size)
+                // Too narrow for its picture, a space fades to empty (and back once it widens).
+                let alpha: CGFloat = view.background.isShown(inWidth: frame.width) ? 1 : 0
+                if animate, addedBackgrounds.contains(item.id) {
+                    view.frame = frame
+                    view.alphaValue = 0
+                    view.animator().alphaValue = alpha
+                } else {
+                    (animate ? view.animator() : view).frame = frame
+                    (animate ? view.animator() : view).alphaValue = alpha
+                }
+            }
         }
         addedKinds = []
+        addedBackgrounds = []
     }
 }
 

@@ -6,6 +6,9 @@ import SwiftUI
 struct ItemPreview: View {
     let kind: BarItemKind
     let width: CGFloat
+    /// Brightens a spacer's outline, and outlines a flexible space showing a background:
+    /// it's under the pointer, or its background is being chosen.
+    var isHighlighted = false
 
     private static let finderIcon = NSWorkspace.shared.icon(forFile: "/System/Library/CoreServices/Finder.app")
 
@@ -17,12 +20,20 @@ struct ItemPreview: View {
 
     @ViewBuilder private var content: some View {
         switch kind {
-        case .space, .flexibleSpace:
-            RoundedRectangle(cornerRadius: 8, style: .continuous)
-                .strokeBorder(.white.opacity(0.3), style: StrokeStyle(lineWidth: 1, dash: [3, 3]))
+        case .flexibleSpace(let background?) where background.isShown(inWidth: width):
+            SpaceBackgroundImage(background: background, width: width)
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
+                // Rendered for the final width, so clipped while the frame animates there.
+                .clipped()
                 .overlay {
-                    if kind == .flexibleSpace, width >= 36 {
-                        Image(systemName: "arrow.left.and.right")
+                    if isHighlighted { spacerOutline }
+                }
+        case .space, .flexibleSpace:
+            spacerOutline
+                .overlay {
+                    if kind.isFlexibleSpace, width >= 36 {
+                        // Too narrow for its background, a space shows which one it would show.
+                        Image(systemName: kind.background?.symbol ?? "arrow.left.and.right")
                             .font(.system(size: 10, weight: .semibold))
                             .foregroundStyle(.white.opacity(0.45))
                     }
@@ -102,11 +113,29 @@ struct ItemPreview: View {
         }
     }
 
+    private var spacerOutline: some View {
+        RoundedRectangle(cornerRadius: 8, style: .continuous)
+            .strokeBorder(.white.opacity(isHighlighted ? 0.6 : 0.3), style: StrokeStyle(lineWidth: 1, dash: [3, 3]))
+    }
+
     private func appIcon(_ icon: NSImage) -> some View {
         Image(nsImage: icon)
             .resizable()
             .frame(width: 22, height: 22)
             .frame(maxWidth: .infinity, maxHeight: .infinity)
             .glassEffect(.regular, in: .capsule)
+    }
+}
+
+/// A flexible space's background, rendered by the same code as on the Touch Bar.
+struct SpaceBackgroundImage: View {
+    let background: SpaceBackground
+    let width: CGFloat
+    @Environment(\.displayScale) private var scale
+
+    var body: some View {
+        if let image = background.image(size: CGSize(width: width, height: BarMetrics.height), scale: scale) {
+            Image(decorative: image, scale: scale)
+        }
     }
 }

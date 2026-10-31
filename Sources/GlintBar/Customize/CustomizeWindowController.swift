@@ -63,18 +63,28 @@ final class CustomizeWindowController: NSWindowController, NSWindowDelegate {
     }
 
     #if DEBUG
-    /// Writes a PNG of the window. A process may capture its own windows without
-    /// Screen Recording permission. (CGWindowListCreateImage is unavailable to Swift
+    /// Writes a PNG of the window, with any popover open over it, or with `popoverOnly` of
+    /// just the popover, shadow and all. A process may capture its own windows without
+    /// Screen Recording permission. (CGWindowListCreateImageFromArray is unavailable to Swift
     /// in current SDKs, hence the lookup.)
-    func debugSnapshot(to path: String) {
-        typealias CreateImage = @convention(c) (CGRect, UInt32, UInt32, UInt32) -> Unmanaged<CGImage>?
-        guard let window, let symbol = dlsym(UnsafeMutableRawPointer(bitPattern: -2), "CGWindowListCreateImage") else {
+    func debugSnapshot(to path: String, popoverOnly: Bool = false) {
+        typealias CreateImage = @convention(c) (CGRect, CFArray, UInt32) -> Unmanaged<CGImage>?
+        guard let window,
+            let symbol = dlsym(UnsafeMutableRawPointer(bitPattern: -2), "CGWindowListCreateImageFromArray")
+        else {
             return
         }
         let create = unsafeBitCast(symbol, to: CreateImage.self)
-        // optionIncludingWindow = 1 << 3, boundsIgnoreFraming = 1 << 0, bestResolution = 1 << 3
-        guard let image = create(.null, 1 << 3, UInt32(window.windowNumber), 1 << 0 | 1 << 3)?.takeRetainedValue()
-        else {
+        // Popovers are child windows. The array holds bare window numbers, not objects;
+        // front to back.
+        let popovers = Array((window.childWindows ?? []).filter(\.isVisible).reversed())
+        var windows = (popoverOnly ? popovers : popovers + [window]).map {
+            UnsafeRawPointer(bitPattern: $0.windowNumber)
+        }
+        guard !windows.isEmpty, let list = CFArrayCreate(nil, &windows, windows.count, nil) else { return }
+        // boundsIgnoreFraming = 1 << 0 (leaves out the shadow), bestResolution = 1 << 3
+        let options: UInt32 = popoverOnly ? 1 << 3 : 1 << 0 | 1 << 3
+        guard let image = create(.null, list, options)?.takeRetainedValue() else {
             NSLog("GlintBar: snapshot failed")
             return
         }
@@ -84,7 +94,7 @@ final class CustomizeWindowController: NSWindowController, NSWindowDelegate {
     #endif
 
     func windowWillClose(_ notification: Notification) {
-        BarConfiguration.shared.previewKinds = nil
+        BarConfiguration.shared.previewItems = nil
         SystemResources.shared.setNeeded(false, by: Self.resourcesClient)
         // A closed window's SwiftUI views keep updating with what they observe (the meters
         // every two seconds), so they go once it has closed (the close may come from a

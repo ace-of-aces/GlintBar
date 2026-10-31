@@ -26,6 +26,9 @@ Inside `Sources/GlintBar`:
   [`BarDropTarget`](../Sources/GlintBar/Customize/BarDropTarget.swift), apart from the view.
 - `System/`: audio, brightness, battery, system resources, now playing and other system actions.
 - `Icons/`: glyphs drawn in code (the eclipse logo, the battery).
+- `Backgrounds/`: the pictures flexible spaces can show
+  ([`SpaceBackground`](../Sources/GlintBar/Backgrounds/SpaceBackground.swift)), drawn in code
+  (see [Flexible space backgrounds](#flexible-space-backgrounds)).
 
 ## Building
 
@@ -141,6 +144,19 @@ to GlintBar), whether the audio output's volume can be changed, and whether an a
 app still exists. All of it pauses while the bar can't be seen (screens asleep, another user's
 session in front, app controls showing) and catches up when it can again.
 
+### Flexible space backgrounds
+
+A flexible space's background is part of its saved name (`flexibleSpace:blackHole`), so it
+travels with the layout. Each picture is drawn with Core Graphics for the exact width the space
+has: the black hole and prism keep their centrepiece at the bar's height and stretch the disk,
+beam and spectrum into the room around it, and the sky's stars are scattered tile by tile from
+the middle, so they stay put while the space grows or shrinks. Every picture has a minimum
+width (`SpaceBackground.minimumWidth`); narrower spaces stay empty.
+
+The Touch Bar and the Customize window render through the same code
+(`SpaceBackground.image(size:scale:)`), and only when a space's size changes. On the bar
+they're still images, so they cost nothing while it's showing.
+
 ### Now Playing
 
 Since macOS 15.4, MediaRemote tells third-party processes that nothing is playing.
@@ -171,7 +187,8 @@ Replace `down:volume` with any of these (x positions are in bar points):
 | Buttons | `press:<item>`, e.g. `press:volumeUp` |
 | Battery | `battery:<percent>` (optionally `:charging` or `:power`) fakes the level; `battery:real` undoes it |
 | System Resources | `resources:<cpu>:<gpu>:<memory>:<storage>` in percent fakes the readings; `resources:real` undoes it |
-| Customization window | `customize`, `snapshot:<png path>` |
+| Flexible spaces | `background:<bar index>:<name>` gives the flexible space there a background (`midnightSky`, `blackHole`, `prism`, or `none`) |
+| Customization window | `customize`, `snapshot:<png path>` (includes an open popover), `popover:<png path>` (just the popover), `cbackground:<bar index>` opens a flexible space's background picker, `cbackground:off` closes it |
 | Customization drags | `cdrag:bar:<index>` or `cdrag:palette:<item>` (`app` for the App tile), then `cdrag:to:<x>` or `cdrag:off`, then `cdrag:drop` |
 
 ### Screenshots
@@ -180,4 +197,5 @@ The screenshots in the README live in [`images`](images). They were taken with
 `screencapture -b` from a release build with debug commands
 (`swift build -c release -Xswiftc -DDEBUG`), with `battery:` and `resources:` faking the
 readings and a stand-in `libGlintBarNowPlaying.dylib` next to the binary that reports a
-made-up track. The Customize window was saved with `snapshot:`.
+made-up track. The Customize window was saved with `snapshot:`, the background picker with
+`popover:`.

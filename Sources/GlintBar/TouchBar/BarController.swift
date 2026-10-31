@@ -38,6 +38,8 @@ final class BarController: NSObject, NSTouchBarDelegate {
     private var progressTimer: Timer?
     /// The views of the items on the bar (spacers have none).
     private(set) var itemViews: [BarItemKind: NSView] = [:]
+    /// What the bar shows now: the visible items, and their kinds.
+    private var layoutItems: [BarItem] = []
     private var layoutKinds: [BarItemKind] = []
     private var frontmostApp: NSRunningApplication?
 
@@ -190,7 +192,7 @@ final class BarController: NSObject, NSTouchBarDelegate {
     /// Whether the configured items include any `poll()` keeps up to date. Hidden items
     /// count too: polling is how they come back.
     private var needsPolling: Bool {
-        configuredKinds.contains { kind in
+        configuredItems.map(\.kind).contains { kind in
             guard kind.appURL == nil else { return true }
             let level = kind.level ?? kind.step?.level
             return level == .keyboard || level == .volume
@@ -245,15 +247,17 @@ final class BarController: NSObject, NSTouchBarDelegate {
 
     /// Shows the configured items, minus controls this Mac can't use right now.
     private func applyLayout() {
-        let kinds = visibleKinds
+        let items = visibleItems
+        let kinds = items.map(\.kind)
         var views: [BarItemKind: NSView] = [:]
         for kind in kinds where !kind.isSpacer {
             views[kind] = itemViews[kind] ?? makeItemView(kind)
         }
         // Views of items that left go with them, so nothing keeps updating them.
         itemViews = views
+        layoutItems = items
         layoutKinds = kinds
-        barView.main.setLayout(kinds, views: views)
+        barView.main.setLayout(items, views: views)
         if let content = panel.content, views[content.anchor] == nil { panel.close(animated: false) }
         updateAll()
         updateActivity()
@@ -261,17 +265,17 @@ final class BarController: NSObject, NSTouchBarDelegate {
 
     /// Re-applies the layout when an item came or went (lid closed, output changed, …).
     private func updateAvailability() {
-        if visibleKinds != layoutKinds { applyLayout() }
+        if visibleItems != layoutItems { applyLayout() }
     }
 
-    private var visibleKinds: [BarItemKind] {
-        configuredKinds.filter(\.isAvailable)
+    private var visibleItems: [BarItem] {
+        configuredItems.filter(\.kind.isAvailable)
     }
 
     /// What the bar would show if everything were available.
-    private var configuredKinds: [BarItemKind] {
+    private var configuredItems: [BarItem] {
         let configuration = BarConfiguration.shared
-        return configuration.previewKinds ?? configuration.kinds
+        return configuration.previewItems ?? configuration.items
     }
 
     func makeItemView(_ kind: BarItemKind) -> NSView {

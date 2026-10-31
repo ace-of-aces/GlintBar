@@ -71,11 +71,19 @@ The Touch Bar updates live as you go.
 | **System**  | Spotlight, Siri, Mission Control, Apps, Show Desktop, Input Sources, Quick Actions, Screenshot               |
 | **Session** | Screen Saver, Lock Screen, Sleep                                                                             |
 | **Apps**    | Buttons that launch any app you pick. Drop apps from Finder onto the bar, or right-click one to change it    |
-| **Layout**  | Spaces and flexible spaces                                                                                   |
+| **Layout**  | Spaces and flexible spaces, which can show a background                                                      |
 
-For example, a bar with Now Playing, a few favorite apps, System Resources, Battery and Clock:
+For example, a bar with Now Playing, a flexible space with the Prism background, a few favorite apps, System Resources, Battery and Clock:
 
-![A customized GlintBar](docs/images/custom.png)
+![A customized GlintBar with the Prism background](docs/images/custom.png)
+
+### Backgrounds
+
+Flexible spaces don't have to stay empty. Click one in the Customize window to fill it with a picture:
+
+<p align="center">
+  <img src="docs/images/background-picker.png" width="454" alt="The background picker: None, Midnight Sky, Black Hole and Prism">
+</p>
 
 ### Menu bar
 

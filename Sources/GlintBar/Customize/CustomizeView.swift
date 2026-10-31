@@ -11,6 +11,8 @@ struct CustomizeView: View {
     @State var barFrame = CGRect.zero
     @State var tileFrames: [BarItemKind: CGRect] = [:]
     @State private var hovered: BarItem.ID?
+    /// The flexible space whose background is being chosen.
+    @State var choosingBackground: BarItem.ID?
     /// Apps are being dragged in from Finder.
     @State private var isTargetedByFinder = false
 
@@ -35,7 +37,7 @@ struct CustomizeView: View {
         .padding(.bottom, 24)
         .coordinateSpace(.named(Self.space))
         .overlay(alignment: .topLeading) { ghost }
-        .onChange(of: hardwarePreview) { _, kinds in configuration.previewKinds = kinds }
+        .onChange(of: hardwarePreview) { _, items in configuration.previewItems = items }
         #if DEBUG
         .onChange(of: CustomizeDebugDriver.shared.generation) { runDebugSteps() }
         #endif
@@ -112,7 +114,8 @@ struct CustomizeView: View {
     private func barItem(_ entry: BarEntry) -> some View {
         let item = entry.item
         let showsRemove = hovered == item.id && drag == nil
-        return ItemPreview(kind: item.kind, width: entry.frame.width)
+        let isHighlighted = item.kind.isFlexibleSpace && (showsRemove || choosingBackground == item.id)
+        return ItemPreview(kind: item.kind, width: entry.frame.width, isHighlighted: isHighlighted)
             .opacity(entry.isHidden ? 0 : (entry.isPlaceholder ? 0.3 : 1))
             .overlay(alignment: .topLeading) {
                 Button {
@@ -139,9 +142,23 @@ struct CustomizeView: View {
                 if item.kind.appURL != nil {
                     Button("Change App…", systemImage: "arrow.left.arrow.right") { changeApp(of: item) }
                 }
+                if item.kind.isFlexibleSpace {
+                    backgroundMenu(for: item)
+                }
                 Button("Remove \(item.kind.title)", systemImage: "minus.circle") { remove(item) }
             }
-            .onTapGesture(count: 2) { changeApp(of: item) }
+            // Apps change with a double-click, like opening something; a single click is enough
+            // for a flexible space, which does nothing else on a click.
+            .onTapGesture(count: item.kind.appURL != nil ? 2 : 1) { edit(item) }
+            .modifier(
+                BackgroundChoice(
+                    item: item, width: entry.frame.width,
+                    isPresented: Binding(
+                        get: { choosingBackground == item.id },
+                        set: { if !$0, choosingBackground == item.id { choosingBackground = nil } }
+                    )
+                ) { setBackground($0, of: item) }
+            )
             .gesture(
                 dragGesture(item: item, source: .bar) {
                     CGPoint(x: barFrame.minX + entry.frame.midX, y: barFrame.midY)
@@ -163,9 +180,15 @@ struct CustomizeView: View {
             case (let drag?, .remove?):
                 Label("Release to remove \(drag.item.kind.title).", systemImage: "minus.circle")
                     .foregroundStyle(.secondary)
+            case (nil, _) where isHoveringFlexibleSpace:
+                Label(
+                    "Click the flexible space to choose its background.",
+                    systemImage: "sparkles"
+                )
+                .foregroundStyle(.secondary)
             default:
                 Text(
-                    "Drag items into the GlintBar, drag them along it to rearrange, and drag them out to remove them. Drop apps from Finder to add them."
+                    "Drag items into the GlintBar, drag them along it to rearrange, and drag them out to remove them. Drop apps from Finder to add them. Click a flexible space to give it a background."
                 )
                 .foregroundStyle(.secondary)
             }
@@ -173,6 +196,10 @@ struct CustomizeView: View {
         .font(.callout)
         .frame(maxWidth: .infinity)
         .animation(nil, value: drag?.location)
+    }
+
+    private var isHoveringFlexibleSpace: Bool {
+        configuration.items.contains { $0.id == hovered && $0.kind.isFlexibleSpace }
     }
 
     /// Sections side by side, wrapping onto new rows within the width of the bar below.
@@ -203,7 +230,7 @@ struct CustomizeView: View {
     private func tile(_ kind: BarItemKind, alignsTitle: Bool = false) -> some View {
         let isUsed = kind.isUnique && configuration.contains(kind)
         let isUnavailable = !kind.isAvailable
-        let previewWidth = kind == .flexibleSpace ? 92 : kind.width
+        let previewWidth = kind.isFlexibleSpace ? 92 : kind.width
         let boxWidth = previewWidth + 20
         return VStack(spacing: 7) {
             ItemPreview(kind: kind, width: previewWidth)
@@ -231,7 +258,9 @@ struct CustomizeView: View {
                     ? "Not available on this Mac right now"
                     : kind == .app(nil)
                         ? "Click to choose apps to add, or drag into the GlintBar and pick one. You can also drop apps from Finder onto the bar."
-                        : "Drag into the GlintBar, or click to add it at the end"
+                        : kind.isFlexibleSpace
+                            ? "Drag into the GlintBar, or click to add it at the end. Click it in the bar to give it a background."
+                            : "Drag into the GlintBar, or click to add it at the end"
         )
         .contentShape(Rectangle())
         .onTapGesture {
@@ -270,25 +299,28 @@ struct CustomizeView: View {
             let kind = drag.item.kind
             let outcome = outcome(of: drag)
             let badge = ghostBadge(outcome, source: drag.source)
-            ItemPreview(kind: kind, width: kind == .flexibleSpace ? 92 : kind.width)
-                .padding(6)
-                .background(.black.opacity(0.92), in: RoundedRectangle(cornerRadius: 11, style: .continuous))
-                .overlay(alignment: .topTrailing) {
-                    if let badge {
-                        Image(systemName: badge.symbol)
-                            .font(.system(size: 17))
-                            .symbolRenderingMode(.palette)
-                            .foregroundStyle(.white, badge.color)
-                            .offset(x: 7, y: -7)
-                            .transition(.scale.combined(with: .opacity))
-                    }
+            // Wide enough for a flexible space's background to show.
+            ItemPreview(
+                kind: kind, width: kind.isFlexibleSpace ? max(92, kind.background?.minimumWidth ?? 0) : kind.width
+            )
+            .padding(6)
+            .background(.black.opacity(0.92), in: RoundedRectangle(cornerRadius: 11, style: .continuous))
+            .overlay(alignment: .topTrailing) {
+                if let badge {
+                    Image(systemName: badge.symbol)
+                        .font(.system(size: 17))
+                        .symbolRenderingMode(.palette)
+                        .foregroundStyle(.white, badge.color)
+                        .offset(x: 7, y: -7)
+                        .transition(.scale.combined(with: .opacity))
                 }
-                .scaleEffect(1.08)
-                .opacity(outcome == .remove ? 0.55 : 1)
-                .shadow(color: .black.opacity(0.35), radius: 12, y: 6)
-                .position(x: drag.location.x - drag.grabOffset.width, y: drag.location.y - drag.grabOffset.height)
-                .allowsHitTesting(false)
-                .animation(.spring(duration: 0.2), value: badge?.symbol)
+            }
+            .scaleEffect(1.08)
+            .opacity(outcome == .remove ? 0.55 : 1)
+            .shadow(color: .black.opacity(0.35), radius: 12, y: 6)
+            .position(x: drag.location.x - drag.grabOffset.width, y: drag.location.y - drag.grabOffset.height)
+            .allowsHitTesting(false)
+            .animation(.spring(duration: 0.2), value: badge?.symbol)
         }
     }
 
@@ -322,7 +354,7 @@ struct CustomizeView: View {
             // The palette's App tile: leave its slot open while the user picks the app.
             if case .insert(let index) = outcome { AppPicker.chooseApps { addApps($0, at: index) } }
             withAnimation(.spring(duration: 0.32, bounce: 0.15)) { self.drag = nil }
-            configuration.previewKinds = nil
+            configuration.previewItems = nil
             return
         }
         withAnimation(.spring(duration: 0.32, bounce: 0.15)) {
@@ -338,7 +370,7 @@ struct CustomizeView: View {
             }
             self.drag = nil
         }
-        configuration.previewKinds = nil
+        configuration.previewItems = nil
     }
 
     private var dropTarget: BarDropTarget {
@@ -370,9 +402,9 @@ struct CustomizeView: View {
     var displayedEntries: [BarEntry] { dropTarget.entries(during: drag) }
 
     /// What the real Touch Bar shows during a drag: the would-be result.
-    private var hardwarePreview: [BarItemKind]? {
+    private var hardwarePreview: [BarItem]? {
         guard drag != nil else { return nil }
-        return displayedEntries.filter { !$0.isHidden }.map(\.item.kind)
+        return displayedEntries.filter { !$0.isHidden }.map(\.item)
     }
 
     // MARK: - Editing
@@ -403,6 +435,35 @@ struct CustomizeView: View {
         guard added > 0 else { return }
         withAnimation(.spring(duration: 0.32, bounce: 0.15)) {
             configuration.setItems(items)
+        }
+    }
+
+    /// What clicking an item in the bar does: an app button picks another app, a flexible
+    /// space opens its backgrounds.
+    private func edit(_ item: BarItem) {
+        if item.kind.appURL != nil {
+            changeApp(of: item)
+        } else if item.kind.isFlexibleSpace {
+            choosingBackground = item.id
+        }
+    }
+
+    /// The Background submenu of a flexible space's context menu.
+    private func backgroundMenu(for item: BarItem) -> some View {
+        Picker(
+            "Background",
+            selection: Binding(get: { item.kind.background }, set: { setBackground($0, of: item) })
+        ) {
+            Label("None", systemImage: "rectangle.dashed").tag(SpaceBackground?.none)
+            ForEach(SpaceBackground.allCases, id: \.self) { background in
+                Label(background.title, systemImage: background.symbol).tag(SpaceBackground?.some(background))
+            }
+        }
+    }
+
+    private func setBackground(_ background: SpaceBackground?, of item: BarItem) {
+        withAnimation(.easeOut(duration: 0.2)) {
+            configuration.setBackground(background, of: item.id)
         }
     }
 

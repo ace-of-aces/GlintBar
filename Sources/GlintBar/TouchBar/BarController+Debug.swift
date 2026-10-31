@@ -61,7 +61,16 @@ extension BarController {
                     ? SystemResources.Usage(
                         cpu: percents[0], gpu: percents[1], memory: percents[2], storage: percents[3]
                     ) : nil)
+        case "background":
+            // background:<bar index>:<name> gives the flexible space there a background
+            // (midnightSky, blackHole, prism); background:<bar index>:none takes it away.
+            let items = BarConfiguration.shared.items
+            guard parts.count > 2, let index = Int(parts[1]), items.indices.contains(index) else { return }
+            BarConfiguration.shared.setBackground(SpaceBackground(rawValue: parts[2]), of: items[index].id)
         case "customize": CustomizeWindowController.shared.show()
+        case "cbackground":
+            // cbackground:<bar index> opens the background picker there; cbackground:off closes it.
+            CustomizeDebugDriver.shared.perform(.chooseBackground(index: parts.count > 1 ? Int(parts[1]) : nil))
         case "cdrag":
             // cdrag:bar:<index> · cdrag:palette:<kind> · cdrag:to:<bar x> · cdrag:off · cdrag:drop
             let driver = CustomizeDebugDriver.shared
@@ -78,6 +87,10 @@ extension BarController {
         case "snapshot":
             CustomizeWindowController.shared.debugSnapshot(
                 to: parts.count > 1 ? parts[1...].joined(separator: ":") : "/tmp/glint-customize.png")
+        case "popover":
+            // popover:<png path> saves just the popover open in the customization window.
+            CustomizeWindowController.shared.debugSnapshot(
+                to: parts.count > 1 ? parts[1...].joined(separator: ":") : "/tmp/glint-popover.png", popoverOnly: true)
         case "close": panel.close()
         case "appControls": showAppControls()
         case "glint": showGlint()
