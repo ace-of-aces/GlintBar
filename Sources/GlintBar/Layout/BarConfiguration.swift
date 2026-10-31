@@ -10,7 +10,7 @@ final class BarConfiguration {
     /// Matches the original fixed layout.
     static let defaultKinds: [BarItemKind] = [
         .appControls, .space, .previousTrack, .playPause, .nextTrack,
-        .flexibleSpace,
+        .flexibleSpace(nil),
         .keyboardBrightness, .displayBrightness, .volume, .space, .screenshot, .siri,
     ]
 
@@ -51,6 +51,12 @@ final class BarConfiguration {
 
     func remove(_ id: BarItem.ID) {
         setItems(items.filter { $0.id != id })
+    }
+
+    /// Gives the flexible space `id` a background (or takes it away), keeping its place.
+    func setBackground(_ background: SpaceBackground?, of id: BarItem.ID) {
+        setItems(
+            items.map { $0.id == id && $0.kind.isFlexibleSpace ? BarItem(.flexibleSpace(background), id: id) : $0 })
     }
 
     func restoreDefaults() {

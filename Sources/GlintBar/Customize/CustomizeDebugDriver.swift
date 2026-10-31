@@ -13,6 +13,8 @@ final class CustomizeDebugDriver {
         case moveOverBar(x: CGFloat)
         case moveOffBar
         case drop
+        /// Opens the background picker on the bar item at `index`; nil closes it.
+        case chooseBackground(index: Int?)
     }
 
     static let shared = CustomizeDebugDriver()
@@ -50,6 +52,12 @@ extension CustomizeView {
                 drag?.location = CGPoint(x: barFrame.midX, y: barFrame.maxY + 160)
             case .drop:
                 finishDrag()
+            case .chooseBackground(let index?):
+                let entries = displayedEntries
+                guard entries.indices.contains(index), entries[index].item.kind.isFlexibleSpace else { continue }
+                choosingBackground = entries[index].item.id
+            case .chooseBackground(nil):
+                choosingBackground = nil
             }
         }
     }

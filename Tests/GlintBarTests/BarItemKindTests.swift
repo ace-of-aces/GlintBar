@@ -50,6 +50,33 @@ struct BarItemKindTests {
         #expect(picked == dropped)
     }
 
+    @Test func flexibleSpaceBackgroundsSurviveSaving() {
+        #expect(BarItemKind.flexibleSpace(nil).rawValue == "flexibleSpace")
+        #expect(BarItemKind.flexibleSpace(.blackHole).rawValue == "flexibleSpace:blackHole")
+        for background in [nil] + SpaceBackground.allCases.map(Optional.some) {
+            let kind = BarItemKind.flexibleSpace(background)
+            #expect(BarItemKind(rawValue: kind.rawValue) == kind)
+        }
+    }
+
+    /// Changing one of these loses the background from every saved layout.
+    @Test func savedBackgroundNamesStayTheSame() {
+        #expect(SpaceBackground.allCases.map(\.rawValue).sorted() == ["blackHole", "midnightSky", "prism"])
+    }
+
+    @Test func unknownBackgroundsLeaveTheSpacePlain() {
+        #expect(BarItemKind(rawValue: "flexibleSpace:aurora") == .flexibleSpace(nil))
+        #expect(BarItemKind(rawValue: "flexibleSpace:") == .flexibleSpace(nil))
+    }
+
+    @Test func flexibleSpacesWithBackgroundsAreStillSpacers() {
+        let kind = BarItemKind.flexibleSpace(.prism)
+        #expect(kind.isSpacer && kind.isFlexibleSpace && !kind.isUnique)
+        #expect(kind.background == .prism)
+        #expect(kind.title == "Flexible Space")
+        #expect(BarItemKind.space.background == nil && !BarItemKind.space.isFlexibleSpace)
+    }
+
     @Test func unknownNamesAreSkipped() {
         #expect(BarItemKind(rawValue: "notAnItem") == nil)
         #expect(BarItemKind(rawValue: "app:") == nil)

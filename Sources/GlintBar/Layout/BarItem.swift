@@ -36,7 +36,9 @@ enum BarItemKind: Hashable, Sendable {
     /// an app before it goes into the bar.
     case app(URL?)
     case space
-    case flexibleSpace
+    /// Shares out the room the other items leave, showing `background` there when there's
+    /// enough of it.
+    case flexibleSpace(SpaceBackground?)
 
     /// How the item is saved, e.g. `volume` or `app:/Applications/Safari.app`. Spelled
     /// out rather than derived from the case names, so renaming a case can't lose it
@@ -75,7 +77,8 @@ enum BarItemKind: Hashable, Sendable {
         case .systemResources: "systemResources"
         case .app(let url): Self.appPrefix + (url?.path ?? "")
         case .space: "space"
-        case .flexibleSpace: "flexibleSpace"
+        case .flexibleSpace(nil): "flexibleSpace"
+        case .flexibleSpace(let background?): Self.flexibleSpacePrefix + background.rawValue
         }
     }
 
@@ -88,6 +91,11 @@ enum BarItemKind: Hashable, Sendable {
             self = .launching(URL(fileURLWithPath: String(path)))
             return
         }
+        if rawValue.hasPrefix(Self.flexibleSpacePrefix) {
+            // A background this version doesn't know leaves the space plain instead of losing it.
+            self = .flexibleSpace(SpaceBackground(rawValue: String(rawValue.dropFirst(Self.flexibleSpacePrefix.count))))
+            return
+        }
         guard let kind = PaletteSection.all.lazy.flatMap(\.kinds).first(where: { $0.rawValue == rawValue }) else {
             return nil
         }
@@ -95,6 +103,7 @@ enum BarItemKind: Hashable, Sendable {
     }
 
     private static let appPrefix = "app:"
+    private static let flexibleSpacePrefix = "flexibleSpace:"
 
     var title: String {
         switch self {
@@ -200,7 +209,21 @@ enum BarItemKind: Hashable, Sendable {
         return format.contains("a") ? 84 : 56
     }()
 
-    var isSpacer: Bool { self == .space || self == .flexibleSpace }
+    var isSpacer: Bool {
+        switch self {
+        case .space, .flexibleSpace: true
+        default: false
+        }
+    }
+
+    var isFlexibleSpace: Bool {
+        if case .flexibleSpace = self { true } else { false }
+    }
+
+    /// What a flexible space shows.
+    var background: SpaceBackground? {
+        if case .flexibleSpace(let background) = self { background } else { nil }
+    }
 
     /// Spacers can be used any number of times; everything else at most once.
     var isUnique: Bool { !isSpacer }
@@ -275,7 +298,7 @@ struct PaletteSection {
                 .displayBrightness, .displayBrightnessDown, .displayBrightnessUp,
                 .keyboardBrightness, .keyboardBrightnessDown, .keyboardBrightnessUp, .nightShift,
             ]),
-        PaletteSection(title: "Spacing", kinds: [.space, .flexibleSpace]),
+        PaletteSection(title: "Spacing", kinds: [.space, .flexibleSpace(nil)]),
         PaletteSection(
             title: "System",
             kinds: [
@@ -310,13 +333,13 @@ enum BarLayout {
 
     /// One frame per item, left to right, in a bar of the given size.
     static func frames(for kinds: [BarItemKind], in size: CGSize) -> [CGRect] {
-        let flexibleCount = kinds.filter { $0 == .flexibleSpace }.count
+        let flexibleCount = kinds.filter(\.isFlexibleSpace).count
         let flexibleWidth = flexibleCount > 0 ? max(size.width - fixedWidth(of: kinds), 0) / CGFloat(flexibleCount) : 0
         var frames: [CGRect] = []
         var x: CGFloat = 0
         for (index, kind) in kinds.enumerated() {
             if index > 0 { x += gap(between: kinds[index - 1], and: kind) }
-            let width = kind == .flexibleSpace ? flexibleWidth : kind.width
+            let width = kind.isFlexibleSpace ? flexibleWidth : kind.width
             frames.append(CGRect(x: x, y: 0, width: width, height: size.height))
             x += width
         }

@@ -7,7 +7,8 @@ struct BarLayoutTests {
     @Test func spacersBringTheirOwnSpacing() {
         #expect(BarLayout.gap(between: .mute, and: .siri) == BarLayout.gap)
         #expect(BarLayout.gap(between: .mute, and: .space) == 0)
-        #expect(BarLayout.gap(between: .flexibleSpace, and: .siri) == 0)
+        #expect(BarLayout.gap(between: .flexibleSpace(nil), and: .siri) == 0)
+        #expect(BarLayout.gap(between: .mute, and: .flexibleSpace(.blackHole)) == 0)
     }
 
     @Test func fixedWidthCountsItemsAndGaps() {
@@ -25,8 +26,8 @@ struct BarLayoutTests {
 
     @Test func flexibleSpacesShareWhatIsLeft() {
         let frames = BarLayout.frames(
-            for: [.mute, .flexibleSpace, .siri, .flexibleSpace], in: CGSize(width: 288, height: 30))
-        // 288 - 88 fixed, split in two.
+            for: [.mute, .flexibleSpace(nil), .siri, .flexibleSpace(.midnightSky)], in: CGSize(width: 288, height: 30))
+        // 288 - 88 fixed, split in two, whatever they show.
         #expect(frames[1].width == 100)
         #expect(frames[3].width == 100)
         #expect(frames[2].minX == 144)
@@ -34,7 +35,7 @@ struct BarLayoutTests {
     }
 
     @Test func flexibleSpacesNeverGoNegative() {
-        let frames = BarLayout.frames(for: [.nowPlaying, .flexibleSpace], in: CGSize(width: 100, height: 30))
+        let frames = BarLayout.frames(for: [.nowPlaying, .flexibleSpace(nil)], in: CGSize(width: 100, height: 30))
         #expect(frames[1].width == 0)
     }
 

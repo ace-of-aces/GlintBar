@@ -59,14 +59,25 @@ final class BarView: NSView {
 }
 
 /// The configurable row of items. Views are owned by `BarController`; this view only
-/// shows and positions them according to `BarLayout`.
+/// shows and positions them according to `BarLayout`. The backgrounds of flexible spaces
+/// are its own.
 @MainActor
 final class MainRowView: NSView {
     private var kinds: [BarItemKind] = []
     private var views: [BarItemKind: NSView] = [:]
     /// Views added by the last `setLayout`, which fade in instead of sliding.
     private var addedKinds: Set<BarItemKind> = []
+    private var backgrounds: [BackgroundSlot: SpaceBackgroundView] = [:]
+    private var addedBackgrounds: Set<BackgroundSlot> = []
     private var animateNextLayout = false
+
+    /// A flexible space's background, known by its picture and which of the spaces showing
+    /// that picture it is, so it keeps its view while the layout changes around it.
+    private struct BackgroundSlot: Hashable {
+        var background: SpaceBackground
+        /// 0 for the first space showing `background`, 1 for the second, …
+        var occurrence: Int
+    }
 
     func setLayout(_ kinds: [BarItemKind], views: [BarItemKind: NSView]) {
         for (kind, view) in self.views where views[kind] !== view || !kinds.contains(kind) {
@@ -80,7 +91,46 @@ final class MainRowView: NSView {
             addSubview(view)
             addedKinds.insert(kind)
         }
+        updateBackgrounds()
         needsLayout = true
+    }
+
+    /// Makes a background view for every flexible space that shows one, and lets those of
+    /// spaces that went (or changed their picture) fade away where they were.
+    private func updateBackgrounds() {
+        let slots = Set(Self.backgroundSlots(in: kinds).map(\.slot))
+        for (slot, view) in backgrounds where !slots.contains(slot) {
+            backgrounds[slot] = nil
+            guard animateNextLayout else {
+                view.removeFromSuperview()
+                continue
+            }
+            NSAnimationContext.runAnimationGroup { context in
+                context.duration = 0.25
+                view.animator().alphaValue = 0
+            } completionHandler: {
+                MainActor.assumeIsolated { view.removeFromSuperview() }
+            }
+        }
+        addedBackgrounds = []
+        for slot in slots where backgrounds[slot] == nil {
+            let view = SpaceBackgroundView(slot.background)
+            // Behind the items, which it only ever meets mid-animation.
+            addSubview(view, positioned: .below, relativeTo: nil)
+            backgrounds[slot] = view
+            addedBackgrounds.insert(slot)
+        }
+    }
+
+    /// The flexible spaces with a background, by their index in `kinds`.
+    private static func backgroundSlots(in kinds: [BarItemKind]) -> [(index: Int, slot: BackgroundSlot)] {
+        var counts: [SpaceBackground: Int] = [:]
+        return kinds.enumerated().compactMap { index, kind in
+            guard let background = kind.background else { return nil }
+            let occurrence = counts[background, default: 0]
+            counts[background] = occurrence + 1
+            return (index, BackgroundSlot(background: background, occurrence: occurrence))
+        }
     }
 
     override func layout() {
@@ -90,7 +140,8 @@ final class MainRowView: NSView {
         NSAnimationContext.runAnimationGroup { context in
             context.duration = animate ? 0.25 : 0
             context.timingFunction = CAMediaTimingFunction(name: .easeOut)
-            for (kind, frame) in zip(kinds, BarLayout.frames(for: kinds, in: bounds.size)) {
+            let frames = BarLayout.frames(for: kinds, in: bounds.size)
+            for (kind, frame) in zip(kinds, frames) {
                 guard let view = views[kind] else { continue }
                 if animate, addedKinds.contains(kind) {
                     view.frame = frame
@@ -100,8 +151,24 @@ final class MainRowView: NSView {
                     (animate ? view.animator() : view).frame = frame
                 }
             }
+            for (index, slot) in Self.backgroundSlots(in: kinds) {
+                guard let view = backgrounds[slot] else { continue }
+                let frame = frames[index]
+                view.prepare(for: frame.size)
+                // Too narrow for its picture, a space fades to empty (and back once it widens).
+                let alpha: CGFloat = slot.background.isShown(inWidth: frame.width) ? 1 : 0
+                if animate, addedBackgrounds.contains(slot) {
+                    view.frame = frame
+                    view.alphaValue = 0
+                    view.animator().alphaValue = alpha
+                } else {
+                    (animate ? view.animator() : view).frame = frame
+                    (animate ? view.animator() : view).alphaValue = alpha
+                }
+            }
         }
         addedKinds = []
+        addedBackgrounds = []
     }
 }
 
